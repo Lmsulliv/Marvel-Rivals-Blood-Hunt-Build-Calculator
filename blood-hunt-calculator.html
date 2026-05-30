@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blood Hunt — Damage Calculator</title>
+<style>
+:root {
+  --bg: #0e1117;
+  --panel: #161b27;
+  --panel2: #1d2436;
+  --border: #2a3350;
+  --accent: #4e9af1;
+  --accent2: #e05c5c;
+  --green: #4caf6e;
+  --yellow: #d4a843;
+  --text: #d0d8f0;
+  --muted: #6b7a9e;
+  --red: #e05c5c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+}
+h1 { font-size: 18px; color: var(--accent); letter-spacing: 1px; }
+h2 { font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+
+.app { display: grid; grid-template-columns: 380px 1fr; gap: 12px; padding: 12px; max-width: 1400px; margin: 0 auto; }
+.header { grid-column: 1/-1; display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.left-col { display: flex; flex-direction: column; gap: 10px; }
+.right-col { display: flex; flex-direction: column; gap: 10px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.panel.collapsible > .panel-head { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.panel.collapsible > .panel-head::after { content: '▼'; font-size: 10px; margin-left: auto; transition: transform 0.15s; }
+.panel.collapsible.collapsed > .panel-head::after { transform: rotate(-90deg); }
+.panel.collapsible.collapsed > .panel-body { display: none; }
+.panel-body { margin-top: 10px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field label { font-size: 11px; color: var(--muted); }
+.field input[type=number], .field input[type=text], .field select {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+.field input.warn { border-color: var(--yellow); }
+
+.toggle-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel2); transition: all 0.15s; user-select: none; }
+.toggle:hover { border-color: var(--accent); }
+.toggle input { display: none; }
+.toggle.active { border-color: var(--accent); background: #1a2d4a; color: var(--accent); }
+.toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.toggle.active .dot { background: var(--accent); }
+
+/* Results */
+.result-big { font-size: 28px; font-weight: 700; color: var(--green); letter-spacing: 1px; }
+.result-sub { font-size: 14px; color: var(--yellow); margin-top: 4px; }
+.breakdown-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+.breakdown-table th { text-align: left; color: var(--muted); font-weight: 400; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.breakdown-table td { padding: 3px 6px; border-bottom: 1px solid #1a2030; }
+.breakdown-table td:last-child { text-align: right; font-family: monospace; }
+.breakdown-table tr.highlight td { color: var(--accent); }
+
+/* Optimizer */
+.rank-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #1a2030; font-size: 12px; }
+.rank-num { width: 18px; text-align: center; color: var(--muted); font-size: 11px; }
+.rank-bar-wrap { flex: 1; height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.rank-bar { height: 100%; background: var(--accent); border-radius: 3px; }
+.rank-pct { width: 60px; text-align: right; font-family: monospace; font-size: 11px; color: var(--green); }
+.rank-stat { width: 160px; }
+
+/* Talent tree */
+.talent-level { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.talent-level-head { background: var(--panel2); padding: 5px 8px; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.talent-level-head strong { color: var(--text); font-size: 12px; }
+.talent-level-body { padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.talent-line { display: flex; align-items: center; gap: 6px; }
+.talent-line label { flex: 1; font-size: 11px; color: var(--text); }
+.talent-line.sub label { color: var(--muted); }
+.talent-line input[type=number] {
+  width: 48px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text); padding: 2px 4px; font-size: 11px; text-align: center;
+}
+.talent-line input:focus { outline: none; border-color: var(--accent); }
+.talent-exclusive { display: flex; gap: 6px; }
+.talent-exclusive label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--panel2); transition: all 0.15s; }
+.talent-exclusive label:has(input:checked) { border-color: var(--accent); background: #1a2d4a; color: var(--accent); }
+.talent-exclusive input[type=radio] { display: none; }
+.points-badge { margin-left: auto; font-size: 11px; font-weight: 600; }
+.points-badge.ok { color: var(--green); }
+.points-badge.warn { color: var(--yellow); }
+.points-badge.over { color: var(--red); }
+
+/* Gear */
+.gear-slot { margin-bottom: 8px; }
+.gear-slot h3 { margin-bottom: 4px; }
+.mod-row { display: grid; grid-template-columns: 80px 1fr; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.mod-row input { background: var(--panel2); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 2px 5px; font-size: 11px; width: 100%; }
+.mod-row input:focus { outline: none; border-color: var(--accent); }
+
+/* Self-test */
+.test-row { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 3px 0; }
+.test-pass { color: var(--green); }
+.test-fail { color: var(--red); }
+
+/* Compare */
+.compare-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.compare-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+
+/* Save/load */
+.save-area { width: 100%; min-height: 60px; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 6px; font-size: 11px; font-family: monospace; resize: vertical; }
+.btn { background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.85; }
+.btn.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+.btn.danger { background: var(--accent2); }
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+
+.warn-box { background: #2a1f00; border: 1px solid var(--yellow); border-radius: 4px; padding: 5px 8px; font-size: 11px; color: var(--yellow); margin-top: 6px; }
+.info-box { background: #0d1f3a; border: 1px solid var(--accent); border-radius: 4px; padding: 5px 8px; font-size: 11px; color: var(--accent); margin-top: 6px; }
+.sep { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+.tag { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-left: 4px; background: #1a2d4a; color: var(--accent); }
+.tag.green { background: #0d2a1a; color: var(--green); }
+.tag.yellow { background: #2a1f00; color: var(--yellow); }
+
+/* Ability selector */
+.ability-tab-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.ability-tab { padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; cursor: pointer; background: var(--panel2); }
+.ability-tab.active { border-color: var(--accent); background: #1a2d4a; color: var(--accent); }
+
+/* Priority list */
+.priority-list { font-size: 11px; }
+.priority-list li { padding: 2px 0 2px 12px; position: relative; color: var(--text); }
+.priority-list li::before { content: '›'; position: absolute; left: 0; color: var(--accent); }
+
+/* Scrollable panel body */
+.scrollable { max-height: 520px; overflow-y: auto; }
+.scrollable::-webkit-scrollbar { width: 4px; }
+.scrollable::-webkit-scrollbar-track { background: var(--panel2); }
+.scrollable::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ===================================================== HEADER -->
+<div class="header">
+  <h1>🦈 Blood Hunt Calculator</h1>
+  <span style="color:var(--muted);font-size:12px">Jeff the Land Shark — Hide &amp; Seek Build</span>
+  <div class="header-actions">
+    <button class="btn secondary" onclick="exportBuild()">Export JSON</button>
+    <button class="btn secondary" onclick="importBuild()">Import JSON</button>
+    <button class="btn secondary" onclick="resetToDefaults()">Reset</button>
+  </div>
+</div>
+
+<!-- ===================================================== LEFT COL -->
+<div class="left-col">
+
+<!-- BASE DAMAGE -->
+<div class="panel">
+  <h2>Base Damage (actual base + weapon flat)</h2>
+  <div class="info-box" style="margin-bottom:8px">Measure each value in the practice range with no gear equipped, then add the weapon gear flat bonus.</div>
+  <div id="base-damage-inputs"></div>
+</div>
+
+<!-- OFFENSIVE STATS -->
+<div class="panel">
+  <h2>Offensive Stats</h2>
+  <div class="grid2" id="offensive-stats-inputs"></div>
+</div>
+
+<!-- CONDITION TOGGLES -->
+<div class="panel">
+  <h2>Condition Toggles</h2>
+  <div class="toggle-group" id="condition-toggles"></div>
+</div>
+
+<!-- TOTAL OUTPUT -->
+<div class="panel">
+  <h2>Total Output</h2>
+  <div class="grid4">
+    <div class="field"><label>Base Output</label><input type="number" id="to-base" value="278"></div>
+    <div class="field"><label>Weapon Roll</label><input type="number" id="to-weapon" value="0"></div>
+    <div class="field"><label>Amulet Roll</label><input type="number" id="to-amulet" value="0"></div>
+    <div class="field"><label>Exclusive Roll</label><input type="number" id="to-exclusive" value="0"></div>
+  </div>
+  <div style="margin-top:6px;font-size:11px;color:var(--muted)">Formula: base + 11.5×(√weapon + √amulet + √exclusive) &nbsp;→&nbsp; <span id="to-computed" style="color:var(--green);font-weight:600">278.00</span></div>
+</div>
+
+<!-- CRIT / PRECISION -->
+<div class="panel">
+  <h2>Crit / Precision</h2>
+  <div class="grid4">
+    <div class="field"><label>Crit Rate %</label><input type="number" id="cr" value="24" step="0.1"></div>
+    <div class="field"><label>Crit Dmg %</label><input type="number" id="cd" value="682" step="1"></div>
+    <div class="field"><label>Prec Rate %</label><input type="number" id="pr" value="9" step="0.1"></div>
+    <div class="field"><label>Prec Dmg %</label><input type="number" id="pd" value="10628" step="1"></div>
+  </div>
+  <div style="margin-top:6px;">
+    <label style="font-size:11px;color:var(--muted)">Level-21 node:</label>
+    <div style="display:flex;gap:8px;margin-top:4px;" id="lvl21-selector">
+      <label class="talent-exclusive" style="border:1px solid var(--border)"><input type="radio" name="lvl21" value="none" checked> None</label>
+      <label class="talent-exclusive" style="border:1px solid var(--border)"><input type="radio" name="lvl21" value="crit"> ×1.5 Crit Dmg</label>
+      <label class="talent-exclusive" style="border:1px solid var(--border)"><input type="radio" name="lvl21" value="prec"> ×2.0 Prec Dmg</label>
+    </div>
+  </div>
+  <div id="crit-warn" style="display:none" class="warn-box">CR+PR exceeds 100% — values computed but check your build.</div>
+</div>
+
+<!-- VULNERABILITY & EXTERNAL MULTIPLIERS -->
+<div class="panel">
+  <h2>Vulnerability &amp; External Multipliers</h2>
+  <div class="grid2" style="margin-bottom:8px">
+    <div class="field"><label>Vulnerability %</label><input type="number" id="vuln" value="0" step="1"></div>
+    <div class="field"><label>Primary Wpn Extra Dmg %</label><input type="number" id="pwed" value="0" step="0.1"></div>
+    <div class="field"><label>Ability Extra Dmg %</label><input type="number" id="aed" value="0" step="0.1"></div>
+  </div>
+  <div id="ext-mults-inputs"></div>
+</div>
+
+<!-- SAVE / LOAD / COMPARE -->
+<div class="panel collapsible collapsed" id="save-panel">
+  <div class="panel-head" onclick="togglePanel('save-panel')"><h2 style="margin:0">Save / Load / Compare</h2></div>
+  <div class="panel-body">
+    <textarea class="save-area" id="save-area" placeholder="JSON build string appears here…"></textarea>
+    <div class="btn-row">
+      <button class="btn" onclick="exportBuild()">Copy to box</button>
+      <button class="btn secondary" onclick="importBuild()">Load from box</button>
+      <button class="btn secondary" onclick="loadCompare()">Load as Build B</button>
+    </div>
+    <div id="compare-section" style="margin-top:10px;display:none">
+      <h3>Side-by-Side Compare</h3>
+      <div class="compare-wrap">
+        <div><div class="compare-label">Build A (current)</div><div id="compare-a"></div></div>
+        <div><div class="compare-label">Build B (loaded)</div><div id="compare-b"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SELF-TEST -->
+<div class="panel collapsible collapsed" id="test-panel">
+  <div class="panel-head" onclick="togglePanel('test-panel')"><h2 style="margin:0">Self-Test</h2></div>
+  <div class="panel-body" id="self-test-results"></div>
+</div>
+
+</div><!-- /left-col -->
+
+<!-- ===================================================== RIGHT COL -->
+<div class="right-col">
+
+<!-- RESULTS -->
+<div class="panel" id="results-panel">
+  <h2>Results</h2>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Average Damage / Hit</div>
+      <div class="result-big" id="result-avg">—</div>
+      <div class="result-sub" id="result-raw">raw: —</div>
+    </div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Active ability:</div>
+      <div class="ability-tab-row" id="result-ability-tabs"></div>
+    </div>
+  </div>
+  <table class="breakdown-table" id="breakdown-table">
+    <thead><tr><th>Factor</th><th>Value</th><th>Multiplier ×</th></tr></thead>
+    <tbody id="breakdown-tbody"></tbody>
+  </table>
+  <div id="boss-note" style="display:none" class="warn-box" style="margin-top:6px">Boss mode: boss-conditional bonus included. Boss damage is approximate due to likely enemy armor.</div>
+</div>
+
+<!-- OPTIMIZER -->
+<div class="panel">
+  <h2>Optimizer — Marginal Gain Ranking</h2>
+  <div id="optimizer-output"></div>
+  <hr class="sep">
+  <h3>Reference Priority Order (source)</h3>
+  <ol class="priority-list" id="priority-ref"></ol>
+  <hr class="sep">
+  <h3>Per-Slot Preferred Modifiers (reference)</h3>
+  <div id="slot-prefs"></div>
+  <hr class="sep">
+  <div class="info-box">
+    <strong>Future: Affix-tier optimizer (stub)</strong><br>
+    When per-tier affix tables are available, CD/PD affixes must be scaled by the talent-tree coefficient:
+    <code>CD_new = (CD_current / coeff + affix) * coeff</code> (coeff ≈ 1.5 for crit build, 2.0 for prec build).
+    Hook: implement <code>HERO_DATA.jeff.talentCdCoeff</code> and wire into optimizer.
+  </div>
+</div>
+
+<!-- TALENT TREE -->
+<div class="panel collapsible" id="talent-panel">
+  <div class="panel-head" onclick="togglePanel('talent-panel')">
+    <h2 style="margin:0">Talent Tree</h2>
+    <span id="points-badge" class="points-badge ok" style="margin-left:12px">0/60</span>
+  </div>
+  <div class="panel-body scrollable" id="talent-tree-body"></div>
+</div>
+
+<!-- GEAR -->
+<div class="panel collapsible" id="gear-panel">
+  <div class="panel-head" onclick="togglePanel('gear-panel')">
+    <h2 style="margin:0">Gear</h2>
+  </div>
+  <div class="panel-body scrollable" id="gear-body"></div>
+</div>
+
+<!-- REALM -->
+<div class="panel collapsible collapsed" id="realm-panel">
+  <div class="panel-head" onclick="togglePanel('realm-panel')"><h2 style="margin:0">Realm (Account Level)</h2></div>
+  <div class="panel-body" id="realm-body"></div>
+</div>
+
+</div><!-- /right-col -->
+</div><!-- /app -->
+
+<script>
+'use strict';
+// ============================================================
+// DATA BLOCK — edit hero data here; never touch the engine below
+// ============================================================
+
+const HERO_DATA = {
+  jeff: {
+    name: "Jeff the Land Shark",
+    build: "Hide & Seek (Swim)",
+    totalPoints: 60,
+
+    // Abilities whose damage we track
+    abilities: [
+      { id: "ram",       label: "Ram (Collision)",      baseDmg: 0, dmgType: "primary", gearBonusKey: "wcbf" },
+      { id: "splish",    label: "Splish Splash (per stream)", baseDmg: 0, dmgType: "ability", gearBonusKey: "mouthwash" },
+      { id: "aquaburst", label: "Aqua Burst",            baseDmg: 0, dmgType: "ability" },
+      { id: "ult",       label: "Ult Swallow",           baseDmg: 0, dmgType: "ability" },
+      { id: "sprint",    label: "Hyper Sprint Dash",     baseDmg: 0, dmgType: "primary" },
+      { id: "bubble",    label: "Healing Bubble Hit",    baseDmg: 0, dmgType: "ability" },
+    ],
+
+    // Special gear effects keyed by gearBonusKey
+    specialGear: {
+      wcbf: {
+        label: "West Coast Bionic Fin",
+        desc: "Ram gains +10390% of Hide-and-Seek base collision damage.",
+        // NOTE: verify whether this adds to base before the multiplier stack (additive to base)
+        // or acts as its own multiplier. Implemented as: extra = ram_base * (10390/100), added to baseDmg before formula.
+        compute: (ramBase) => ramBase * (10390 / 100),
+        enabled: false,
+      },
+      mouthwash: {
+        label: "Skuld's Mouthwash",
+        desc: "Splish Splash gains +3000% damage as a DoT effect.",
+        // NOTE: verify whether this is a separate hit or modifies base damage. Implemented as a separate dot multiplier shown in results.
+        dotPct: 3000,
+        enabled: false,
+      },
+    },
+
+    // Offensive stat definitions (feeds UI and stats object)
+    offensiveStats: [
+      { id: "totalDmg",    label: "Total Damage %",          default: 0,   bucket: "totalDmg" },
+      { id: "bossDmg",     label: "Boss Damage %",           default: 0,   bucket: "conditional", condition: "boss" },
+      { id: "meleeDmg",    label: "Melee (<5m) Damage %",    default: 0,   bucket: "conditional", condition: "melee" },
+      { id: "fullHpDmg",   label: "Full-HP Target Damage %", default: 0,   bucket: "conditional", condition: "fullhp" },
+    ],
+
+    // Realm upgrades
+    realm: [
+      { id: "realm_output",   label: "Output Boost", pctPerTier: 25, tiers: 5, statKey: "realmOutputPct",   desc: "+25% total output boost / tier" },
+      { id: "realm_hp",       label: "Health",       flatPerTier: 150, tiers: 5, statKey: "realmHp",        desc: "+150 HP / tier", defensive: true },
+      { id: "realm_drop1",    label: "KO Gear Drop %", pctPerTier: 4, tiers: 5, statKey: null,              desc: "+4% non-boss KO gear drop rate", utility: true },
+      { id: "realm_drop2",    label: "Best Gear Drop %", pctPerTier: 4, tiers: 5, statKey: null,            desc: "+4% current-difficulty best-gear drop rate", utility: true },
+    ],
+
+    // Gear slots
+    gear: {
+      weapon: [
+        {
+          id: "deep_sea_propellor", label: "Deep Sea Propellor (swim)",
+          baseStatLabel: "Ram Dmg +", baseStatKey: "weaponFlatRam", baseDefault: 1000,
+          modSlots: 5,
+          preferred: ["Total Dmg","TO","Boss/Melee/Full-HP","Talent affix","CR/CD","PD","CR","PR"],
+        },
+        {
+          id: "kraken_blaster", label: "Kraken Blaster (spit — alt)",
+          baseStatLabel: "Splish Dmg +", baseStatKey: "weaponFlatSplish", baseDefault: 400,
+          modSlots: 5,
+          preferred: ["Total Dmg","TO","Boss/Melee/Full-HP","Talent affix","CR/CD"],
+        },
+      ],
+      armor: [
+        {
+          id: "armor1", label: "Armor",
+          baseStatLabel: "HP +", baseStatKey: "armorHp", baseDefault: 2419,
+          subBaseLabel: "Armor +", subBaseKey: "armorValue", subBaseDefault: 438,
+          modSlots: 5, defensive: true,
+          preferred: ["HP","Armor","Block/Block%","Heal regen","Kill regen","HP%","Dodge%","Heal cooldown","Heal amount"],
+        },
+      ],
+      accessory: [
+        {
+          id: "accessory1", label: "Accessory (Amulet)",
+          baseStatLabel: "Crit Rate +", baseStatKey: "accCr", baseDefault: 16.2,
+          subBaseLabel: "Block Rate +", subBaseKey: "accBlock", subBaseDefault: 18.5,
+          modSlots: 5,
+          preferred: ["TO","Boss/Melee/Full-HP","Armor","HP","CR/CD","PD","Block/Block%","Total Dmg","PR","Kill regen","Heal regen","Dodge%","Heal cooldown","Heal amount","Talent affix"],
+        },
+      ],
+      exclusive: [
+        {
+          id: "wcbf_gear", label: "West Coast Bionic Fin",
+          baseStatLabel: "Special", baseStatKey: null, baseDefault: 0,
+          note: "Ram +10390% of base collision damage (see special gear toggle)",
+          modSlots: 5,
+          preferred: ["TO","Boss/Melee/Full-HP","HP","Armor","CR/CD","PR/PD","Block%","Talent affix"],
+        },
+        {
+          id: "mouthwash_gear", label: "Skuld's Mouthwash",
+          baseStatLabel: "Special", baseStatKey: null, baseDefault: 0,
+          note: "Splish Splash +3000% damage as DoT (see special gear toggle)",
+          modSlots: 5,
+          preferred: ["TO","Boss/Melee/Full-HP","HP","Armor","CR/CD","PR/PD","Block%","Talent affix"],
+        },
+      ],
+    },
+
+    // Talent tree definition
+    talent: [
+      {
+        level: 1, type: "main",
+        lines: [
+          { id: "l1_dmgbonus", label: "Damage Bonus", statKey: "totalDmg", pctPerTier: 10, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 2, type: "multi",
+        lines: [
+          { id: "l2_hp",     label: "Health (main)",           statKey: "hp",         flatPerTier: 70, maxTiers: 5, min: 0, defensive: true },
+          { id: "l2_breath", label: "Deep Breath (+10 energy/tier)", statKey: null,   maxTiers: 3, min: 0, sub: true, note: "hide-and-seek energy" },
+          { id: "l2_shark",  label: "Shark Zone (pool 70%+70%/tier)", statKey: null,  maxTiers: 3, min: 0, sub: true, note: "water pool dmg" },
+        ],
+      },
+      {
+        level: 3, type: "main",
+        lines: [
+          { id: "l3_output", label: "Output Amplification", statKey: "talentOutputPct", pctPerTier: 15, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 4, type: "multi",
+        lines: [
+          { id: "l4_armor",  label: "Armor (main)",          statKey: "armor",    flatPerTier: 50, maxTiers: 5, min: 0, defensive: true },
+          { id: "l4_fwd",    label: "Forward Frenzy (+30% ram/tier)", statKey: "talentRamPct", pctPerTier: 30, maxTiers: 3, min: 0, sub: true },
+          { id: "l4_jet",    label: "High Speed Jet (+30% jet interval/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 5, type: "main",
+        lines: [
+          { id: "l5_cd", label: "Critical Damage", statKey: "critDmgTalent", pctPerTier: 30, maxTiers: 5, min: 0, isCdTier: true },
+        ],
+      },
+      {
+        level: 6, type: "multi",
+        lines: [
+          { id: "l6_block", label: "Block Rate (main)", statKey: "blockRate", pctPerTier: 3, maxTiers: 5, min: 0, defensive: true },
+          { id: "l6_bff",   label: "Big Fish Frenzy (+10% ult bonus/tier)", statKey: "bffPct", pctPerTier: 10, maxTiers: 3, min: 0, sub: true },
+          { id: "l6_belly", label: "Belly Full (+200 Splish ammo/tier)",   statKey: null, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 7, type: "exclusive",
+        exclusives: [
+          { id: "l7_atkspd", label: "+40% Primary Attack Speed", statKey: "atkSpd", value: 40 },
+          { id: "l7_cd_red", label: "-40% Cooldowns", statKey: "cdReduction", value: 40 },
+        ],
+        min: 1,
+      },
+      {
+        level: 8, type: "multi",
+        lines: [
+          { id: "l8_hp",     label: "Health (main)",          statKey: "hp",    flatPerTier: 70, maxTiers: 5, min: 0, defensive: true },
+          { id: "l8_turbo",  label: "Land Shark Turbo (+25% move speed)", statKey: null, maxTiers: 1, min: 0, sub: true },
+          { id: "l8_whirl",  label: "Whirlpool Waterbomb (Aqua Burst triggers remaining drowning)", statKey: null, maxTiers: 1, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 9, type: "main",
+        lines: [
+          { id: "l9_cr", label: "Critical Hit Rate", statKey: "critRateTalent", pctPerTier: 3, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 10, type: "multi",
+        lines: [
+          { id: "l10_bdr",   label: "Block Damage Reduction (main)", statKey: "blockDmgRed", flatPerTier: 15, maxTiers: 5, min: 0, defensive: true },
+          { id: "l10_unstp", label: "Un-Shark-Stoppable (+30% ram/tier)", statKey: "talentRamPct2", pctPerTier: 30, maxTiers: 3, min: 0, sub: true },
+          { id: "l10_res",   label: "Reservoir (+3% Aqua Burst dmg+radius/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 11, type: "main",
+        lines: [
+          { id: "l11_output", label: "Output Amplification", statKey: "talentOutputPct2", pctPerTier: 15, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 12, type: "multi",
+        lines: [
+          { id: "l12_maxhp", label: "Max Health +10%/tier", statKey: null, maxTiers: 5, min: 0, defensive: true },
+          { id: "l12_hang",  label: "Hangry (+10 ult charge/s/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+          { id: "l12_fork",  label: "Forked Stream (+2 streams, +20% Splish/tier)", statKey: "forkedStreamPct", pctPerTier: 20, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 13, type: "exclusive",
+        exclusives: [
+          { id: "l13_pwr",  label: "+50% Primary Weapon Damage Bonus", statKey: "primaryWpnExtraDmg", value: 50 },
+          { id: "l13_abi",  label: "+50% Ability Extra Damage", statKey: "abilityExtraDmg", value: 50 },
+          // NOTE: CONFIRM ability extra is % not flat
+        ],
+        min: 0,
+      },
+      {
+        level: 14, type: "multi",
+        lines: [
+          { id: "l14_dodge",  label: "Dodge Rate +1%/tier", statKey: "dodgeRate", pctPerTier: 1, maxTiers: 5, min: 0, defensive: true },
+          { id: "l14_bubble", label: "Bubble Bath (cast bubble during Hide and Seek)", statKey: null, maxTiers: 1, min: 0, sub: true },
+          { id: "l14_bog",    label: "Bogged Down (Splish slows, +10% dmg up to 30%, pierce)", statKey: null, maxTiers: 1, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 15, type: "main",
+        lines: [
+          { id: "l15_pr", label: "Precision Rate", statKey: "precRateTalent", pctPerTier: 1, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 16, type: "multi",
+        lines: [
+          { id: "l16_armor",   label: "Armor +50/tier", statKey: "armor2", flatPerTier: 50, maxTiers: 5, min: 0, defensive: true },
+          { id: "l16_bubblei", label: "Bubbling Impact (+150 shockwave/tier)", statKey: "bubblingImpact", flatPerTier: 150, maxTiers: 3, min: 0, sub: true },
+          { id: "l16_bubbleas",label: "Bubble Assault (+33% Splish-bubble pop/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 17, type: "main",
+        lines: [
+          { id: "l17_pd", label: "Precision Damage", statKey: "precDmgTalent", pctPerTier: 175, maxTiers: 5, min: 0, isPdTier: true },
+        ],
+      },
+      {
+        level: 18, type: "multi",
+        lines: [
+          { id: "l18_hp",    label: "Health +10%/tier", statKey: null, maxTiers: 5, min: 0, defensive: true },
+          { id: "l18_tsun",  label: "Tsunami (+200 shockwave/tier, req Bubbling Impact)", statKey: "tsunami", flatPerTier: 200, maxTiers: 3, min: 0, sub: true, requires: "l16_bubblei" },
+          { id: "l18_surge", label: "Surging Undercurrent (+200% Splish inherit/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 19, type: "main",
+        lines: [
+          { id: "l19_ultcharge", label: "Ultimate Charge Speed +30%/tier", statKey: null, maxTiers: 5, min: 0 },
+        ],
+      },
+      {
+        level: 20, type: "multi",
+        lines: [
+          { id: "l20_bdr",   label: "Block Damage Reduction +15%/tier", statKey: "blockDmgRedPct", pctPerTier: 15, maxTiers: 5, min: 0, defensive: true },
+          { id: "l20_churn", label: "Churning the Seas (ult motion deals collision dmg)", statKey: null, maxTiers: 1, min: 0, sub: true },
+          { id: "l20_burp",  label: "Burp! (KO restores bubble charge)", statKey: null, maxTiers: 1, min: 0, sub: true },
+        ],
+      },
+      {
+        level: 21, type: "exclusive",
+        exclusives: [
+          { id: "l21_crit", label: "×150% Crit Damage (MULTIPLICATIVE)", statKey: "lvl21Crit", value: 1.5, multiplicative: true },
+          { id: "l21_prec", label: "×200% Prec Damage (MULTIPLICATIVE)", statKey: "lvl21Prec", value: 2.0, multiplicative: true },
+        ],
+        min: 0,
+        note: "MULTIPLICATIVE: multiplies CD×1.5 or PD×2.0 before the crit/prec term. NOTE: switch to 'multiply final hit' if playtesting shows that instead.",
+      },
+    ],
+
+    // Source priority reference (for display)
+    priorityOrder: [
+      "Total Damage (weapon slot)",
+      "Critical Damage",
+      "Total Damage (amulet slot)",
+      "Total Output (amulet / exclusive)",
+      "Critical Damage (additional)",
+      "Total Output (amulet / exclusive) (additional)",
+      "Critical Rate",
+      "Critical Damage (additional 2)",
+      "Total Output (weapon slot)",
+      "Critical Rate (additional)",
+      "Melee / Boss / Full-HP (last resort, weapon)",
+    ],
+
+    slotPrefs: {
+      "Weapon Slot 1": ["Total Dmg", "TO", "BMF"],
+      "Weapon Slot 2": ["Talent affix", "CR/CD", "TO", "BMF"],
+      "Weapon Slot 3": ["CR/CD", "PD", "TO", "BMF"],
+      "Weapon Slot 4": ["CR", "PR"],
+      "Weapon Slot 5": ["Talent affix", "TO", "BMF"],
+      "Amulet Slot 1": ["TO", "BMF", "Armor", "HP"],
+      "Amulet Slot 2": ["CR/CD", "PD", "Block/Block%"],
+      "Amulet Slot 3": ["CR/CD", "PD", "Block/Block%"],
+      "Amulet Slot 4": ["Total Dmg", "TO", "CR/CD", "PR", "BMF", "Armor", "HP/HP%", "Kill regen", "Heal regen", "Dodge%", "Block/Block%", "Heal cooldown", "Heal amount"],
+      "Amulet Slot 5": ["Talent affix"],
+      "Armor Slot 1": ["HP", "Armor"],
+      "Armor Slot 2": ["Block/Block%", "Heal regen", "Kill regen"],
+      "Armor Slot 3": ["HP", "Armor", "Block/Block%"],
+      "Armor Slot 4": ["HP%", "Dodge%"],
+      "Armor Slot 5": ["HP%", "Dodge%", "Heal cooldown", "Heal amount"],
+      "Exclusive Slot 1": ["TO", "BMF", "HP", "Armor"],
+      "Exclusive Slot 2": ["CR/CD", "PR/PD", "Block%"],
+      "Exclusive Slot 3": ["Talent affix"],
+      "Exclusive Slot 4": ["Talent affix"],
+      "Exclusive Slot 5": ["Talent affix"],
+    },
+
+    // External multipliers (label, default value)
+    externalMults: [
+      { id: "ext1", label: "Ext Mult 1 (fire rate/atk speed)", default: 1.0 },
+      { id: "ext2", label: "Ext Mult 2", default: 1.0 },
+      { id: "ext3", label: "Ext Mult 3", default: 1.0 },
+      { id: "ext4", label: "Ext Mult 4", default: 1.0 },
+    ],
+  },
+};
+
+// ============================================================
+// FORMULA ENGINE — pure functions, no DOM, no side effects
+// ============================================================
+
+function computeTotalOutput(base, nWeapon, nAmulet, nExclusive) {
+  return base + 11.5 * (Math.sqrt(nWeapon) + Math.sqrt(nAmulet) + Math.sqrt(nExclusive));
+}
+
+/**
+ * Core damage formula.
+ * @param {object} s - flat stats object
+ * @param {number} baseDmg - base_weapon_damage for this ability
+ * @param {string} dmgType - "primary" | "ability"
+ * @returns {object} { rawHit, avgHit, breakdown }
+ */
+function computeDamage(s, baseDmg, dmgType) {
+  const totalOutput = s.totalOutput;
+
+  // Level-21 multiplicative node
+  // NOTE: switch to "multiply final hit" if playtesting shows that instead
+  let cd = s.critDmg;
+  let pd = s.precDmg;
+  if (s.lvl21 === "crit") cd = cd * 1.5;
+  if (s.lvl21 === "prec") pd = pd * 2.0;
+
+  const cr = s.critRate;
+  const pr = s.precRate;
+
+  const activeCond = s.activeCond;
+
+  const pwebPct  = (dmgType === "primary") ? s.primaryWpnExtraDmg : 0;
+  const aedPct   = (dmgType === "ability") ? s.abilityExtraDmg    : 0;
+
+  // raw_hit_damage
+  const f1 = 1 + (s.totalDmgPct + activeCond) / 100;
+  const f2 = 1 + totalOutput / 100;
+  const f3 = 1 + s.vulnPct / 100;
+  const f4 = 1 + pwebPct / 100;
+  const f5 = 1 + aedPct / 100;
+
+  const rawHit = baseDmg * f1 * f2 * f3 * f4 * f5;
+
+  // Crit/prec amortised multiplier
+  // E[mult] = 1 + CR/100 * (CD/100 - 1) + PR/100 * (PD/100 - 1)
+  const critMult = 1 + (cr / 100) * (cd / 100 - 1) + (pr / 100) * (pd / 100 - 1);
+
+  // External multipliers
+  const extMult = s.extMult1 * s.extMult2 * s.extMult3 * s.extMult4;
+
+  const avgHit = rawHit * critMult * extMult;
+
+  const breakdown = [
+    { label: "Base Damage",           value: fmt(baseDmg),            mult: null },
+    { label: "× (1 + TotalDmg + Cond)/100", value: `TotalDmg=${s.totalDmgPct.toFixed(1)}% Cond=${activeCond.toFixed(1)}%`, mult: f1.toFixed(4) },
+    { label: "× (1 + TotalOutput/100)",     value: `TO=${totalOutput.toFixed(2)}`,   mult: f2.toFixed(4) },
+    { label: "× (1 + Vuln/100)",            value: `Vuln=${s.vulnPct}%`,             mult: f3.toFixed(4) },
+    { label: "× (1 + PrimaryWpnExtra/100)", value: `${pwebPct.toFixed(1)}%`,         mult: f4.toFixed(4), dim: pwebPct === 0 },
+    { label: "× (1 + AbilityExtra/100)",    value: `${aedPct.toFixed(1)}%`,          mult: f5.toFixed(4), dim: aedPct === 0 },
+    { label: "= Raw Hit",                   value: fmt(rawHit),                       mult: null, highlight: true },
+    { label: "× Crit/Prec (amortised)",     value: `CR=${cr}% CD=${cd}% PR=${pr}% PD=${pd}%`, mult: critMult.toFixed(4) },
+    { label: "× External Mults",            value: `${s.extMult1}×${s.extMult2}×${s.extMult3}×${s.extMult4}`, mult: extMult.toFixed(4) },
+    { label: "= Avg Dmg / Hit",             value: fmt(avgHit),                       mult: null, highlight: true },
+  ];
+
+  return { rawHit, avgHit, breakdown, cd, pd, critMult, extMult, f1, f2, f3, f4, f5, totalOutput };
+}
+
+// ============================================================
+// OPTIMIZER — marginal analysis
+// ============================================================
+function computeOptimizer(s, baseDmg, dmgType) {
+  const base = computeDamage(s, baseDmg, dmgType).avgHit;
+  if (base === 0) return [];
+
+  const delta = 1; // 1 percentage point increment
+
+  function marginal(key, increment) {
+    const sNew = Object.assign({}, s, { [key]: (s[key] || 0) + increment });
+    return (computeDamage(sNew, baseDmg, dmgType).avgHit - base) / base * 100;
+  }
+
+  function marginalOutput(slot) {
+    const keys = { weapon: "toWeapon", amulet: "toAmulet", exclusive: "toExclusive" };
+    const k = keys[slot];
+    const cur = s[k] || 0;
+    const newTO = computeTotalOutput(s.toBase, slot === "weapon" ? cur + delta : s.toWeapon, slot === "amulet" ? cur + delta : s.toAmulet, slot === "exclusive" ? cur + delta : s.toExclusive);
+    const sNew = Object.assign({}, s, { totalOutput: newTO });
+    return (computeDamage(sNew, baseDmg, dmgType).avgHit - base) / base * 100;
+  }
+
+  const results = [
+    { stat: "Total Damage (+1%)",           gain: marginal("totalDmgPct", delta) },
+    { stat: "Boss Cond (+1%)",              gain: s.condBoss   ? marginal("activeCond", delta) : NaN, note: "toggle boss ON to see" },
+    { stat: "Melee Cond (+1%)",             gain: s.condMelee  ? marginal("activeCond", delta) : NaN, note: "toggle melee ON to see" },
+    { stat: "FullHP Cond (+1%)",            gain: s.condFullHp ? marginal("activeCond", delta) : NaN, note: "toggle full-HP ON to see" },
+    { stat: "Total Output — Weapon (+1)",   gain: marginalOutput("weapon") },
+    { stat: "Total Output — Amulet (+1)",   gain: marginalOutput("amulet") },
+    { stat: "Total Output — Exclusive (+1)",gain: marginalOutput("exclusive") },
+    { stat: "Vulnerability (+1%)",          gain: marginal("vulnPct", delta) },
+    { stat: dmgType==="primary" ? "Primary Wpn Extra (+1%)" : "Ability Extra (+1%)", gain: dmgType==="primary" ? marginal("primaryWpnExtraDmg", delta) : marginal("abilityExtraDmg", delta) },
+    { stat: "Crit Rate (+1%)",              gain: marginal("critRate", delta) },
+    { stat: "Crit Damage (+1%)",            gain: marginal("critDmg", delta) },
+    { stat: "Prec Rate (+1%)",              gain: marginal("precRate", delta) },
+    { stat: "Prec Damage (+1%)",            gain: marginal("precDmg", delta) },
+  ].filter(r => !isNaN(r.gain)).sort((a, b) => b.gain - a.gain);
+
+  return results;
+}
+
+// ============================================================
+// SELF-TEST
+// ============================================================
+const SELF_TESTS = [
+  {
+    label: "Precision",
+    expected: 979596,
+    s: { totalDmgPct: 604, activeCond: 1998, totalOutput: 278, critRate: 24, critDmg: 682, precRate: 9, precDmg: 10628, vulnPct: 0, primaryWpnExtraDmg: 0, abilityExtraDmg: 0, extMult1: 1, extMult2: 1, extMult3: 1, extMult4: 1, lvl21: "none" },
+    baseDmg: 800, dmgType: "ability",
+  },
+  {
+    label: "Crit",
+    expected: 1459829,
+    s: { totalDmgPct: 963, activeCond: 1168, totalOutput: 518, critRate: 50, critDmg: 2512, precRate: 2, precDmg: 975, vulnPct: 0, primaryWpnExtraDmg: 0, abilityExtraDmg: 0, extMult1: 1, extMult2: 1, extMult3: 1, extMult4: 1, lvl21: "none" },
+    baseDmg: 800, dmgType: "ability",
+  },
+  {
+    label: "Mixed",
+    expected: 645434,
+    s: { totalDmgPct: 425, activeCond: 432, totalOutput: 718, critRate: 40, critDmg: 1344, precRate: 6, precDmg: 7234, vulnPct: 0, primaryWpnExtraDmg: 0, abilityExtraDmg: 0, extMult1: 1, extMult2: 1, extMult3: 1, extMult4: 1, lvl21: "none" },
+    baseDmg: 800, dmgType: "ability",
+  },
+];
+
+function runSelfTests() {
+  return SELF_TESTS.map(t => {
+    const res = computeDamage(t.s, t.baseDmg, t.dmgType);
+    const pct = Math.abs(res.avgHit - t.expected) / t.expected * 100;
+    return { label: t.label, got: res.avgHit, expected: t.expected, pct, pass: pct < 1 };
+  });
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function fmt(n) {
+  if (!isFinite(n)) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
+function fmtPct(n) { return n.toFixed(3) + "%"; }
+function el(id) { return document.getElementById(id); }
+function togglePanel(id) { el(id).classList.toggle("collapsed"); }
+
+// ============================================================
+// STATE
+// ============================================================
+const hero = HERO_DATA.jeff;
+let state = {};         // flat computed stats for current ability
+let talentState = {};   // id -> tier count
+let gearState = {};     // gearId -> { base, mods: [v,v,v,v,v] }
+let realmState = {};    // id -> tier
+let condState = { boss: false, melee: false, fullhp: false };
+let activeAbility = hero.abilities[0].id;
+let buildB = null;
+
+// ============================================================
+// BUILD INIT / RESET
+// ============================================================
+function defaultTalentState() {
+  const t = {};
+  hero.talent.forEach(lvl => {
+    if (lvl.type === "exclusive") {
+      t[lvl.exclusives[0].id + "_sel"] = null;
+    } else {
+      lvl.lines.forEach(ln => { t[ln.id] = 0; });
+    }
+  });
+  return t;
+}
+
+function defaultGearState() {
+  const g = {};
+  Object.values(hero.gear).forEach(slots => {
+    slots.forEach(slot => {
+      g[slot.id] = { base: slot.baseDefault || 0, sub: slot.subBaseDefault || 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
+    });
+  });
+  return g;
+}
+
+function defaultRealmState() {
+  const r = {};
+  hero.realm.forEach(row => { r[row.id] = 0; });
+  return r;
+}
+
+function resetToDefaults() {
+  talentState = defaultTalentState();
+  gearState   = defaultGearState();
+  realmState  = defaultRealmState();
+  condState   = { boss: false, melee: false, fullhp: false };
+  activeAbility = hero.abilities[0].id;
+
+  // Reset DOM inputs
+  hero.abilities.forEach(ab => {
+    const inp = el("base_" + ab.id);
+    if (inp) inp.value = ab.baseDmg;
+  });
+  el("to-base").value = 278;
+  el("to-weapon").value = 0;
+  el("to-amulet").value = 0;
+  el("to-exclusive").value = 0;
+  el("cr").value = 24;
+  el("cd").value = 682;
+  el("pr").value = 9;
+  el("pd").value = 10628;
+  el("vuln").value = 0;
+  el("pwed").value = 0;
+  el("aed").value = 0;
+  document.querySelector('input[name="lvl21"][value="none"]').checked = true;
+
+  hero.offensiveStats.forEach(s => {
+    const inp = el("stat_" + s.id);
+    if (inp) inp.value = s.default;
+  });
+  hero.externalMults.forEach(m => {
+    const inp = el(m.id);
+    if (inp) inp.value = m.default;
+  });
+
+  syncTalentDOM();
+  syncGearDOM();
+  syncRealmDOM();
+  syncCondDOM();
+  recalc();
+}
+
+// ============================================================
+// BUILD TALENT TREE DOM
+// ============================================================
+function buildTalentTree() {
+  const body = el("talent-tree-body");
+  body.innerHTML = "";
+
+  hero.talent.forEach(lvl => {
+    const div = document.createElement("div");
+    div.className = "talent-level";
+    div.id = "talent-lvl-" + lvl.level;
+
+    const head = document.createElement("div");
+    head.className = "talent-level-head";
+    head.innerHTML = `<strong>Level ${lvl.level}</strong>`;
+    if (lvl.note) head.innerHTML += `<span class="tag yellow">!</span>`;
+    div.appendChild(head);
+
+    const body2 = document.createElement("div");
+    body2.className = "talent-level-body";
+
+    if (lvl.type === "exclusive") {
+      const row = document.createElement("div");
+      row.className = "talent-exclusive";
+      if (lvl.min === 0) {
+        const lbl = document.createElement("label");
+        lbl.innerHTML = `<input type="radio" name="l${lvl.level}_excl" value="_none"> None`;
+        lbl.querySelector("input").checked = true;
+        lbl.querySelector("input").addEventListener("change", () => { talentState[`l${lvl.level}_sel`] = null; recalc(); });
+        row.appendChild(lbl);
+      }
+      lvl.exclusives.forEach(ex => {
+        const lbl = document.createElement("label");
+        lbl.innerHTML = `<input type="radio" name="l${lvl.level}_excl" value="${ex.id}"> ${ex.label}`;
+        lbl.querySelector("input").addEventListener("change", e => {
+          if (e.target.checked) { talentState[`l${lvl.level}_sel`] = ex.id; recalc(); }
+        });
+        row.appendChild(lbl);
+      });
+      body2.appendChild(row);
+      if (lvl.note) {
+        const note = document.createElement("div");
+        note.style = "font-size:10px;color:var(--muted);margin-top:3px;";
+        note.textContent = lvl.note;
+        body2.appendChild(note);
+      }
+    } else {
+      lvl.lines.forEach(ln => {
+        const row = document.createElement("div");
+        row.className = "talent-line" + (ln.sub ? " sub" : "");
+
+        const max = ln.maxTiers;
+        const labelStr = ln.label + (max > 1 ? ` (0–${max})` : " (0–1)");
+        row.innerHTML = `<label>${labelStr}</label><input type="number" id="tln_${ln.id}" min="0" max="${max}" value="${talentState[ln.id]||0}" step="1">`;
+        row.querySelector("input").addEventListener("input", e => {
+          let v = parseInt(e.target.value) || 0;
+          v = Math.max(0, Math.min(max, v));
+          e.target.value = v;
+          talentState[ln.id] = v;
+          recalc();
+        });
+        body2.appendChild(row);
+      });
+    }
+
+    div.appendChild(body2);
+    body.appendChild(div);
+  });
+}
+
+function syncTalentDOM() {
+  hero.talent.forEach(lvl => {
+    if (lvl.type === "exclusive") {
+      const sel = talentState[`l${lvl.level}_sel`];
+      const radios = document.querySelectorAll(`input[name="l${lvl.level}_excl"]`);
+      radios.forEach(r => { r.checked = (sel ? r.value === sel : r.value === "_none"); });
+    } else {
+      lvl.lines.forEach(ln => {
+        const inp = el("tln_" + ln.id);
+        if (inp) inp.value = talentState[ln.id] || 0;
+      });
+    }
+  });
+}
+
+// ============================================================
+// BUILD GEAR DOM
+// ============================================================
+function buildGearDOM() {
+  const body = el("gear-body");
+  body.innerHTML = "";
+
+  Object.entries(hero.gear).forEach(([cat, slots]) => {
+    const catHead = document.createElement("h3");
+    catHead.style = "margin-top:8px;";
+    catHead.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+    body.appendChild(catHead);
+
+    slots.forEach(slot => {
+      const gs = gearState[slot.id] || { base: slot.baseDefault || 0, sub: slot.subBaseDefault || 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
+
+      const wrap = document.createElement("div");
+      wrap.className = "gear-slot";
+
+      let html = `<h3>${slot.label}</h3>`;
+      if (slot.note) html += `<div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">${slot.note}</div>`;
+
+      if (slot.baseStatKey) {
+        html += `<div class="mod-row"><span>${slot.baseStatLabel}</span><input type="number" id="gear_${slot.id}_base" value="${gs.base}" step="1" data-gear="${slot.id}" data-key="base"></div>`;
+      }
+      if (slot.subBaseKey) {
+        html += `<div class="mod-row"><span>${slot.subBaseLabel}</span><input type="number" id="gear_${slot.id}_sub" value="${gs.sub}" step="0.1" data-gear="${slot.id}" data-key="sub"></div>`;
+      }
+
+      html += `<div style="font-size:10px;color:var(--muted);margin:4px 0 2px;">Modifiers (value only — label optional):</div>`;
+      for (let i = 0; i < slot.modSlots; i++) {
+        html += `<div class="mod-row">
+          <input type="text" placeholder="stat" id="gear_${slot.id}_modlabel_${i}" value="${gs.modStats[i]||''}" style="font-size:10px;" data-gear="${slot.id}" data-modlabel="${i}">
+          <input type="number" placeholder="val" id="gear_${slot.id}_mod_${i}" value="${gs.mods[i]||0}" step="0.01" data-gear="${slot.id}" data-mod="${i}">
+        </div>`;
+      }
+      if (slot.preferred) {
+        html += `<div style="font-size:10px;color:var(--muted);margin-top:3px;">Preferred: ${slot.preferred.join(" › ")}</div>`;
+      }
+
+      wrap.innerHTML = html;
+      body.appendChild(wrap);
+
+      // Attach events
+      wrap.querySelectorAll("input[data-gear]").forEach(inp => {
+        inp.addEventListener("input", () => {
+          const gid = inp.dataset.gear;
+          if (!gearState[gid]) gearState[gid] = { base: 0, sub: 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
+          if (inp.dataset.key === "base") gearState[gid].base = parseFloat(inp.value) || 0;
+          else if (inp.dataset.key === "sub") gearState[gid].sub = parseFloat(inp.value) || 0;
+          else if (inp.dataset.mod !== undefined) gearState[gid].mods[parseInt(inp.dataset.mod)] = parseFloat(inp.value) || 0;
+          else if (inp.dataset.modlabel !== undefined) gearState[gid].modStats[parseInt(inp.dataset.modlabel)] = inp.value;
+          recalc();
+        });
+      });
+    });
+  });
+}
+
+function syncGearDOM() {
+  Object.entries(hero.gear).forEach(([, slots]) => {
+    slots.forEach(slot => {
+      const gs = gearState[slot.id] || { base: 0, sub: 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
+      const bInp = el(`gear_${slot.id}_base`);
+      if (bInp) bInp.value = gs.base;
+      const sInp = el(`gear_${slot.id}_sub`);
+      if (sInp) sInp.value = gs.sub;
+      for (let i = 0; i < (slot.modSlots || 5); i++) {
+        const mInp = el(`gear_${slot.id}_mod_${i}`);
+        if (mInp) mInp.value = gs.mods[i] || 0;
+        const mlInp = el(`gear_${slot.id}_modlabel_${i}`);
+        if (mlInp) mlInp.value = gs.modStats[i] || "";
+      }
+    });
+  });
+}
+
+// ============================================================
+// BUILD REALM DOM
+// ============================================================
+function buildRealmDOM() {
+  const body = el("realm-body");
+  body.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "grid2";
+  hero.realm.forEach(row => {
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = `<label>${row.label} (0–${row.tiers}) — ${row.desc}</label><input type="number" id="realm_${row.id}" min="0" max="${row.tiers}" value="${realmState[row.id]||0}" step="1">`;
+    div.querySelector("input").addEventListener("input", e => {
+      let v = parseInt(e.target.value) || 0;
+      v = Math.max(0, Math.min(row.tiers, v));
+      e.target.value = v;
+      realmState[row.id] = v;
+      recalc();
+    });
+    grid.appendChild(div);
+  });
+  body.appendChild(grid);
+}
+
+function syncRealmDOM() {
+  hero.realm.forEach(row => {
+    const inp = el("realm_" + row.id);
+    if (inp) inp.value = realmState[row.id] || 0;
+  });
+}
+
+// ============================================================
+// OFFENSIVE STATS DOM
+// ============================================================
+function buildOffensiveStatsDOM() {
+  const wrap = el("offensive-stats-inputs");
+  wrap.innerHTML = "";
+  hero.offensiveStats.forEach(s => {
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = `<label>${s.label}</label><input type="number" id="stat_${s.id}" value="${s.default}" step="0.1">`;
+    div.querySelector("input").addEventListener("input", recalc);
+    wrap.appendChild(div);
+  });
+}
+
+// ============================================================
+// BASE DAMAGE DOM
+// ============================================================
+function buildBaseDamageDOM() {
+  const wrap = el("base-damage-inputs");
+  wrap.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "grid2";
+  hero.abilities.forEach(ab => {
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = `<label>${ab.label}</label><input type="number" id="base_${ab.id}" value="${ab.baseDmg}" step="1">`;
+    div.querySelector("input").addEventListener("input", recalc);
+    grid.appendChild(div);
+  });
+  wrap.appendChild(grid);
+
+  // Special gear toggles
+  const sgDiv = document.createElement("div");
+  sgDiv.style = "margin-top:8px;";
+  sgDiv.innerHTML = `<h3 style="margin-bottom:6px;">Special Gear Effects</h3>`;
+  Object.entries(hero.specialGear).forEach(([key, sg]) => {
+    const lbl = document.createElement("label");
+    lbl.className = "toggle" + (sg.enabled ? " active" : "");
+    lbl.id = "sg_toggle_" + key;
+    lbl.innerHTML = `<input type="checkbox" ${sg.enabled ? "checked" : ""} id="sg_${key}"><span class="dot"></span>${sg.label}`;
+    lbl.querySelector("input").addEventListener("change", e => {
+      sg.enabled = e.target.checked;
+      lbl.classList.toggle("active", sg.enabled);
+      recalc();
+    });
+    sgDiv.appendChild(lbl);
+    const desc = document.createElement("div");
+    desc.style = "font-size:10px;color:var(--muted);margin:2px 0 6px 0;";
+    desc.textContent = sg.desc;
+    sgDiv.appendChild(desc);
+  });
+  wrap.appendChild(sgDiv);
+}
+
+// ============================================================
+// CONDITION TOGGLES DOM
+// ============================================================
+function buildCondTogglesDOM() {
+  const wrap = el("condition-toggles");
+  wrap.innerHTML = "";
+  const conds = [
+    { id: "boss",   label: "vs Boss" },
+    { id: "melee",  label: "Target <5m" },
+    { id: "fullhp", label: "Target Full/High HP" },
+  ];
+  conds.forEach(c => {
+    const lbl = document.createElement("label");
+    lbl.className = "toggle" + (condState[c.id] ? " active" : "");
+    lbl.id = "cond_toggle_" + c.id;
+    lbl.innerHTML = `<input type="checkbox" ${condState[c.id] ? "checked" : ""} id="cond_${c.id}"><span class="dot"></span>${c.label}`;
+    lbl.querySelector("input").addEventListener("change", e => {
+      condState[c.id] = e.target.checked;
+      lbl.classList.toggle("active", condState[c.id]);
+      recalc();
+    });
+    wrap.appendChild(lbl);
+  });
+}
+
+function syncCondDOM() {
+  ["boss","melee","fullhp"].forEach(c => {
+    const inp = el("cond_" + c);
+    if (inp) inp.checked = condState[c];
+    const lbl = el("cond_toggle_" + c);
+    if (lbl) lbl.classList.toggle("active", condState[c]);
+  });
+}
+
+// ============================================================
+// EXTERNAL MULTS DOM
+// ============================================================
+function buildExternalMultsDOM() {
+  const wrap = el("ext-mults-inputs");
+  wrap.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "grid2";
+  hero.externalMults.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML = `<label>${m.label}</label><input type="number" id="${m.id}" value="${m.default}" step="0.01" min="0.001">`;
+    div.querySelector("input").addEventListener("input", recalc);
+    grid.appendChild(div);
+  });
+  wrap.appendChild(grid);
+}
+
+// ============================================================
+// ABILITY TABS
+// ============================================================
+function buildAbilityTabs() {
+  const row = el("result-ability-tabs");
+  row.innerHTML = "";
+  hero.abilities.forEach(ab => {
+    const btn = document.createElement("div");
+    btn.className = "ability-tab" + (ab.id === activeAbility ? " active" : "");
+    btn.textContent = ab.label;
+    btn.id = "abtab_" + ab.id;
+    btn.addEventListener("click", () => {
+      activeAbility = ab.id;
+      hero.abilities.forEach(a => {
+        const t = el("abtab_" + a.id);
+        if (t) t.classList.toggle("active", a.id === activeAbility);
+      });
+      recalc();
+    });
+    row.appendChild(btn);
+  });
+}
+
+// ============================================================
+// RESOLVE STATS FROM TALENT + GEAR + REALM + DOM
+// ============================================================
+function resolveStats() {
+  const stats = {
+    totalDmgPct: 0,
+    bossDmgPct: 0,
+    meleeDmgPct: 0,
+    fullHpDmgPct: 0,
+    critRate: 0,
+    critDmg: 0,
+    precRate: 0,
+    precDmg: 0,
+    primaryWpnExtraDmg: 0,
+    abilityExtraDmg: 0,
+    vulnPct: 0,
+    totalOutput: 0,
+    toBase: 278,
+    toWeapon: 0,
+    toAmulet: 0,
+    toExclusive: 0,
+    extMult1: 1, extMult2: 1, extMult3: 1, extMult4: 1,
+    lvl21: "none",
+    // derived
+    activeCond: 0,
+    condBoss: false, condMelee: false, condFullHp: false,
+  };
+
+  // From DOM: offensive stats
+  hero.offensiveStats.forEach(s => {
+    const v = parseFloat(el("stat_" + s.id)?.value) || 0;
+    if (s.bucket === "totalDmg") stats.totalDmgPct += v;
+    else if (s.bucket === "conditional") {
+      if (s.condition === "boss")   stats.bossDmgPct  += v;
+      if (s.condition === "melee")  stats.meleeDmgPct += v;
+      if (s.condition === "fullhp") stats.fullHpDmgPct+= v;
+    }
+  });
+
+  // From DOM: crit/prec
+  stats.critRate = parseFloat(el("cr")?.value) || 0;
+  stats.critDmg  = parseFloat(el("cd")?.value) || 0;
+  stats.precRate = parseFloat(el("pr")?.value) || 0;
+  stats.precDmg  = parseFloat(el("pd")?.value) || 0;
+
+  // From DOM: vuln, extra
+  stats.vulnPct           = parseFloat(el("vuln")?.value) || 0;
+  stats.primaryWpnExtraDmg = parseFloat(el("pwed")?.value) || 0;
+  stats.abilityExtraDmg   = parseFloat(el("aed")?.value) || 0;
+
+  // From DOM: total output
+  stats.toBase      = parseFloat(el("to-base")?.value) || 278;
+  stats.toWeapon    = parseFloat(el("to-weapon")?.value) || 0;
+  stats.toAmulet    = parseFloat(el("to-amulet")?.value) || 0;
+  stats.toExclusive = parseFloat(el("to-exclusive")?.value) || 0;
+
+  // External mults
+  hero.externalMults.forEach(m => {
+    stats[m.id] = parseFloat(el(m.id)?.value) || 1;
+  });
+  stats.extMult1 = stats.ext1 || 1;
+  stats.extMult2 = stats.ext2 || 1;
+  stats.extMult3 = stats.ext3 || 1;
+  stats.extMult4 = stats.ext4 || 1;
+
+  // Level-21
+  const lvl21inp = document.querySelector('input[name="lvl21"]:checked');
+  stats.lvl21 = lvl21inp ? lvl21inp.value : "none";
+
+  // Talent contributions
+  hero.talent.forEach(lvl => {
+    if (lvl.type === "exclusive") {
+      const sel = talentState[`l${lvl.level}_sel`];
+      if (sel) {
+        const ex = lvl.exclusives.find(e => e.id === sel);
+        if (ex && ex.statKey && !ex.multiplicative) {
+          stats[ex.statKey] = (stats[ex.statKey] || 0) + ex.value;
+        }
+      }
+    } else {
+      lvl.lines.forEach(ln => {
+        const tiers = talentState[ln.id] || 0;
+        if (!ln.statKey || tiers === 0) return;
+        if (ln.pctPerTier)  stats[ln.statKey] = (stats[ln.statKey]  || 0) + ln.pctPerTier  * tiers;
+        if (ln.flatPerTier) stats[ln.statKey] = (stats[ln.statKey]  || 0) + ln.flatPerTier * tiers;
+      });
+    }
+  });
+
+  // Accumulate talent output into totalDmgPct (output handled separately)
+  // Talent output amplification accumulates into a base output offset
+  const talentOutputPct = (stats.talentOutputPct || 0) + (stats.talentOutputPct2 || 0);
+  // NOTE: talent output adds to base_output before sqrt sub-formula?
+  // Interpret as: talent output boost adds to base_output (same bucket as arcana+realm), not a separate multiplier.
+  stats.toBase = stats.toBase + talentOutputPct;
+
+  // Realm contributions
+  hero.realm.forEach(row => {
+    const t = realmState[row.id] || 0;
+    if (row.statKey === "realmOutputPct" && t > 0) {
+      stats.toBase = stats.toBase + row.pctPerTier * t;
+    }
+  });
+
+  // Compute total output
+  stats.totalOutput = computeTotalOutput(stats.toBase, stats.toWeapon, stats.toAmulet, stats.toExclusive);
+
+  // Talent level 1 feeds statKey "totalDmg"; add to the totalDmgPct bucket
+  stats.totalDmgPct += (stats.totalDmg || 0);
+
+  // Conditions
+  stats.condBoss   = condState.boss;
+  stats.condMelee  = condState.melee;
+  stats.condFullHp = condState.fullhp;
+  stats.activeCond = 0;
+  if (condState.boss)   stats.activeCond += stats.bossDmgPct;
+  if (condState.melee)  stats.activeCond += stats.meleeDmgPct;
+  if (condState.fullhp) stats.activeCond += stats.fullHpDmgPct;
+
+  // Gear: add weapon flat bonus to ability base damage (handled per-ability in recalc)
+  // Gear: add CR/CD/PR/PD etc. from modifier labels (basic label matching)
+  Object.values(hero.gear).forEach(slots => {
+    slots.forEach(slot => {
+      const gs = gearState[slot.id];
+      if (!gs) return;
+      // Base stat
+      if (slot.baseStatKey === "accCr") stats.critRate += gs.base;
+      if (slot.subBaseKey  === "accBlock") {} // defensive, skip
+
+      // Modifier rows — simple label matching
+      for (let i = 0; i < 5; i++) {
+        const lbl = (gs.modStats[i] || "").toLowerCase().trim();
+        const val = gs.mods[i] || 0;
+        if (!val) continue;
+        if (lbl.includes("total dmg") || lbl.includes("total damage"))  stats.totalDmgPct += val;
+        else if (lbl.includes("crit rate") || lbl === "cr")             stats.critRate     += val;
+        else if (lbl.includes("crit dmg")  || lbl === "cd")             stats.critDmg      += val;
+        else if (lbl.includes("prec rate") || lbl === "pr")             stats.precRate     += val;
+        else if (lbl.includes("prec dmg")  || lbl === "pd")             stats.precDmg      += val;
+        else if (lbl.includes("total output") || lbl === "to")         stats.toWeapon     += val; // approximate: treated as weapon slot
+        else if (lbl.includes("boss"))                                  stats.bossDmgPct   += val;
+        else if (lbl.includes("melee"))                                 stats.meleeDmgPct  += val;
+        else if (lbl.includes("full hp") || lbl.includes("fullhp"))    stats.fullHpDmgPct += val;
+        else if (lbl.includes("primary wpn") || lbl.includes("primary weapon")) stats.primaryWpnExtraDmg += val;
+        else if (lbl.includes("ability extra"))                         stats.abilityExtraDmg += val;
+        else if (lbl.includes("vuln"))                                  stats.vulnPct      += val;
+      }
+    });
+  });
+
+  // Recompute output after gear TO mods
+  stats.totalOutput = computeTotalOutput(stats.toBase, stats.toWeapon, stats.toAmulet, stats.toExclusive);
+
+  // Recompute active cond (in case gear added to boss/melee/fullhp)
+  stats.activeCond = 0;
+  if (condState.boss)   stats.activeCond += stats.bossDmgPct;
+  if (condState.melee)  stats.activeCond += stats.meleeDmgPct;
+  if (condState.fullhp) stats.activeCond += stats.fullHpDmgPct;
+
+  return stats;
+}
+
+function resolveAbilityBase(ability, stats) {
+  let base = parseFloat(el("base_" + ability.id)?.value) || 0;
+
+  // Add weapon flat bonus
+  if (ability.id === "ram" || ability.id === "sprint") {
+    const ws = gearState["deep_sea_propellor"];
+    if (ws) base += ws.base;
+  }
+  if (ability.id === "splish") {
+    const ks = gearState["kraken_blaster"];
+    if (ks) base += ks.base;
+  }
+
+  // Special gear: West Coast Bionic Fin
+  if (ability.id === "ram" && hero.specialGear.wcbf.enabled) {
+    const ramBase = parseFloat(el("base_ram")?.value) || 0;
+    base += hero.specialGear.wcbf.compute(ramBase);
+  }
+
+  return base;
+}
+
+// ============================================================
+// RECALCULATE
+// ============================================================
+function recalc() {
+  const stats = resolveStats();
+
+  // Update TO display
+  const toDisplay = computeTotalOutput(
+    parseFloat(el("to-base")?.value)||278,
+    parseFloat(el("to-weapon")?.value)||0,
+    parseFloat(el("to-amulet")?.value)||0,
+    parseFloat(el("to-exclusive")?.value)||0
+  );
+  el("to-computed").textContent = toDisplay.toFixed(2);
+
+  // Crit+prec warning
+  const crv = parseFloat(el("cr")?.value)||0;
+  const prv = parseFloat(el("pr")?.value)||0;
+  el("crit-warn").style.display = (crv + prv > 100) ? "block" : "none";
+
+  // Active ability
+  const ab = hero.abilities.find(a => a.id === activeAbility);
+  const baseDmg = resolveAbilityBase(ab, stats);
+  const result = computeDamage(stats, baseDmg, ab.dmgType);
+
+  // Results panel
+  el("result-avg").textContent = fmt(result.avgHit);
+  el("result-raw").textContent = "raw: " + fmt(result.rawHit);
+
+  // Boss note
+  el("boss-note").style.display = condState.boss ? "block" : "none";
+
+  // Breakdown table
+  const tbody = el("breakdown-tbody");
+  tbody.innerHTML = "";
+  result.breakdown.forEach(row => {
+    const tr = document.createElement("tr");
+    if (row.highlight) tr.className = "highlight";
+    const multStr = row.mult ? `×${row.mult}` : "";
+    tr.innerHTML = `<td style="${row.dim ? 'color:var(--muted)' : ''}">${row.label}</td><td style="${row.dim ? 'color:var(--muted)' : ''}">${row.value}</td><td>${multStr}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Mouthwash DoT note
+  if (activeAbility === "splish" && hero.specialGear.mouthwash.enabled) {
+    const dotBase = baseDmg * (hero.specialGear.mouthwash.dotPct / 100);
+    const tr = document.createElement("tr");
+    tr.style.color = "var(--yellow)";
+    tr.innerHTML = `<td colspan="2">Mouthwash DoT (separate, +3000% of Splish base)</td><td>${fmt(dotBase * (1 + stats.totalDmgPct/100 + stats.activeCond/100))}</td>`;
+    // NOTE: verify whether DoT inherits the full multiplier stack or just base
+    tbody.appendChild(tr);
+  }
+
+  // Points counter
+  updatePointsCounter();
+
+  // Optimizer
+  updateOptimizer(stats, baseDmg, ab.dmgType);
+}
+
+// ============================================================
+// POINTS COUNTER
+// ============================================================
+function updatePointsCounter() {
+  let used = 0;
+  hero.talent.forEach(lvl => {
+    if (lvl.type === "exclusive") {
+      const sel = talentState[`l${lvl.level}_sel`];
+      if (sel && sel !== "_none") used += 1;
+    } else {
+      lvl.lines.forEach(ln => { used += (talentState[ln.id] || 0); });
+    }
+  });
+  const total = hero.totalPoints;
+  const badge = el("points-badge");
+  badge.textContent = `${used}/${total}`;
+  badge.className = "points-badge " + (used === total ? "ok" : used > total ? "over" : "warn");
+}
+
+// ============================================================
+// OPTIMIZER UPDATE
+// ============================================================
+function updateOptimizer(stats, baseDmg, dmgType) {
+  const results = computeOptimizer(stats, baseDmg, dmgType);
+  const wrap = el("optimizer-output");
+  if (!results.length || !baseDmg) {
+    wrap.innerHTML = "<div style='color:var(--muted);font-size:12px'>Enter base damage to see rankings.</div>";
+    return;
+  }
+  const maxGain = results[0].gain;
+  let html = "<div style='margin-bottom:4px;font-size:11px;color:var(--muted)'>Gain % per +1 unit at current build state (higher = better next stat to add)</div>";
+  results.forEach((r, i) => {
+    const barW = maxGain > 0 ? (r.gain / maxGain * 100).toFixed(1) : 0;
+    html += `<div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-stat">${r.stat}</div>
+      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${barW}%"></div></div>
+      <div class="rank-pct">+${fmtPct(r.gain)}</div>
+    </div>`;
+  });
+
+  // CR/CD and PR/PD balance hints
+  const cr = stats.critRate, cd = stats.critDmg, pr = stats.precRate, pd = stats.precDmg;
+  if (cr > 0 && cd > 0) {
+    const cdPerCr = cd / cr;
+    html += `<div class="info-box" style="margin-top:6px;">Crit ratio: CD/CR = ${cdPerCr.toFixed(0)} (source baseline ≈ 80). ${cdPerCr > 80 ? "More CR relatively better" : "More CD relatively better"} at this build.</div>`;
+  }
+  if (pr > 0 && pd > 0) {
+    const pdPerPr = pd / pr;
+    html += `<div class="info-box" style="margin-top:4px;">Prec ratio: PD/PR = ${pdPerPr.toFixed(0)} (source baseline ≈ 633). ${pdPerPr > 633 ? "More PR relatively better" : "More PD relatively better"} at this build.</div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+// ============================================================
+// PRIORITY / SLOT PREFS
+// ============================================================
+function buildPriorityRef() {
+  const list = el("priority-ref");
+  list.innerHTML = "";
+  hero.priorityOrder.forEach(item => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    list.appendChild(li);
+  });
+
+  const prefs = el("slot-prefs");
+  prefs.innerHTML = "";
+  Object.entries(hero.slotPrefs).forEach(([slot, items]) => {
+    const div = document.createElement("div");
+    div.style = "margin-bottom:4px;font-size:11px;";
+    div.innerHTML = `<span style="color:var(--accent)">${slot}:</span> ${items.join(" › ")}`;
+    prefs.appendChild(div);
+  });
+}
+
+// ============================================================
+// SELF-TEST DISPLAY
+// ============================================================
+function displaySelfTest() {
+  const results = runSelfTests();
+  const wrap = el("self-test-results");
+  wrap.innerHTML = "";
+  results.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "test-row";
+    div.innerHTML = `<span class="${r.pass ? 'test-pass' : 'test-fail'}">${r.pass ? "✓" : "✗"} ${r.label}</span><span style="color:var(--muted);font-size:10px;margin-left:6px">expected ${fmt(r.expected)} | got ${fmt(r.got)} | err ${r.pct.toFixed(2)}%</span>`;
+    wrap.appendChild(div);
+  });
+  // Show badge in self-test panel head
+  const panel = el("test-panel");
+  const allPass = results.every(r => r.pass);
+  const badge = panel.querySelector(".panel-head");
+  badge.querySelector("h2").innerHTML = `Self-Test <span class="tag ${allPass ? 'green' : ''}">${allPass ? "PASS" : "FAIL"}</span>`;
+}
+
+// ============================================================
+// SAVE / LOAD / COMPARE
+// ============================================================
+function collectBuildSnapshot() {
+  const abilities = {};
+  hero.abilities.forEach(ab => {
+    abilities[ab.id] = parseFloat(el("base_" + ab.id)?.value) || 0;
+  });
+  const offStats = {};
+  hero.offensiveStats.forEach(s => { offStats[s.id] = parseFloat(el("stat_" + s.id)?.value) || 0; });
+  return {
+    abilities,
+    offStats,
+    toBase: parseFloat(el("to-base")?.value) || 278,
+    toWeapon: parseFloat(el("to-weapon")?.value) || 0,
+    toAmulet: parseFloat(el("to-amulet")?.value) || 0,
+    toExclusive: parseFloat(el("to-exclusive")?.value) || 0,
+    cr: parseFloat(el("cr")?.value) || 0,
+    cd: parseFloat(el("cd")?.value) || 0,
+    pr: parseFloat(el("pr")?.value) || 0,
+    pd: parseFloat(el("pd")?.value) || 0,
+    lvl21: document.querySelector('input[name="lvl21"]:checked')?.value || "none",
+    vuln: parseFloat(el("vuln")?.value) || 0,
+    pwed: parseFloat(el("pwed")?.value) || 0,
+    aed: parseFloat(el("aed")?.value) || 0,
+    extMults: hero.externalMults.map(m => parseFloat(el(m.id)?.value) || 1),
+    talentState: Object.assign({}, talentState),
+    gearState: JSON.parse(JSON.stringify(gearState)),
+    realmState: Object.assign({}, realmState),
+    condState: Object.assign({}, condState),
+    activeAbility,
+    specialGear: { wcbf: hero.specialGear.wcbf.enabled, mouthwash: hero.specialGear.mouthwash.enabled },
+  };
+}
+
+function exportBuild() {
+  const snap = collectBuildSnapshot();
+  el("save-area").value = JSON.stringify(snap, null, 2);
+  el("save-panel").classList.remove("collapsed");
+}
+
+function importBuild() {
+  try {
+    const snap = JSON.parse(el("save-area").value);
+    applySnapshot(snap);
+  } catch(e) {
+    alert("Invalid JSON: " + e.message);
+  }
+}
+
+function applySnapshot(snap) {
+  if (snap.abilities) hero.abilities.forEach(ab => { const inp = el("base_"+ab.id); if(inp && snap.abilities[ab.id] !== undefined) inp.value = snap.abilities[ab.id]; });
+  if (snap.offStats) hero.offensiveStats.forEach(s => { const inp = el("stat_"+s.id); if(inp && snap.offStats[s.id] !== undefined) inp.value = snap.offStats[s.id]; });
+  if (snap.toBase !== undefined) el("to-base").value = snap.toBase;
+  if (snap.toWeapon !== undefined) el("to-weapon").value = snap.toWeapon;
+  if (snap.toAmulet !== undefined) el("to-amulet").value = snap.toAmulet;
+  if (snap.toExclusive !== undefined) el("to-exclusive").value = snap.toExclusive;
+  if (snap.cr !== undefined) el("cr").value = snap.cr;
+  if (snap.cd !== undefined) el("cd").value = snap.cd;
+  if (snap.pr !== undefined) el("pr").value = snap.pr;
+  if (snap.pd !== undefined) el("pd").value = snap.pd;
+  if (snap.lvl21) { const r = document.querySelector(`input[name="lvl21"][value="${snap.lvl21}"]`); if(r) r.checked = true; }
+  if (snap.vuln !== undefined) el("vuln").value = snap.vuln;
+  if (snap.pwed !== undefined) el("pwed").value = snap.pwed;
+  if (snap.aed  !== undefined) el("aed").value  = snap.aed;
+  if (snap.extMults) hero.externalMults.forEach((m,i) => { const inp = el(m.id); if(inp && snap.extMults[i] !== undefined) inp.value = snap.extMults[i]; });
+  if (snap.talentState) { talentState = Object.assign(defaultTalentState(), snap.talentState); syncTalentDOM(); }
+  if (snap.gearState)   { gearState   = Object.assign(defaultGearState(),   snap.gearState);   syncGearDOM(); }
+  if (snap.realmState)  { realmState  = Object.assign(defaultRealmState(),  snap.realmState);  syncRealmDOM(); }
+  if (snap.condState)   { condState   = snap.condState; syncCondDOM(); }
+  if (snap.activeAbility) { activeAbility = snap.activeAbility; hero.abilities.forEach(a => { const t = el("abtab_"+a.id); if(t) t.classList.toggle("active", a.id === activeAbility); }); }
+  if (snap.specialGear) { hero.specialGear.wcbf.enabled = !!snap.specialGear.wcbf; hero.specialGear.mouthwash.enabled = !!snap.specialGear.mouthwash; }
+  recalc();
+}
+
+function loadCompare() {
+  try {
+    buildB = JSON.parse(el("save-area").value);
+    renderCompare();
+  } catch(e) {
+    alert("Invalid JSON: " + e.message);
+  }
+}
+
+function renderCompare() {
+  if (!buildB) return;
+  const section = el("compare-section");
+  section.style.display = "block";
+
+  function buildSummary(snap) {
+    const stats = resolveStatsFromSnap(snap);
+    const ab = hero.abilities.find(a => a.id === (snap.activeAbility || hero.abilities[0].id));
+    const baseDmg = snap.abilities[ab.id] || 0;
+    const result = computeDamage(stats, baseDmg, ab.dmgType);
+    return `<div class="result-big" style="font-size:20px">${fmt(result.avgHit)}</div>
+      <div style="font-size:11px;color:var(--muted)">raw: ${fmt(result.rawHit)}</div>
+      <div style="font-size:11px;margin-top:4px;color:var(--muted)">CR ${stats.critRate}% CD ${stats.critDmg}% PR ${stats.precRate}% PD ${stats.precDmg}%</div>
+      <div style="font-size:11px;color:var(--muted)">TO ${stats.totalOutput.toFixed(0)} | TotalDmg ${stats.totalDmgPct}%</div>`;
+  }
+
+  const snapA = collectBuildSnapshot();
+  el("compare-a").innerHTML = buildSummary(snapA);
+  el("compare-b").innerHTML = buildSummary(buildB);
+}
+
+function resolveStatsFromSnap(snap) {
+  // Lightweight stats resolver from a snapshot (no DOM)
+  const s = {
+    totalDmgPct: 0, bossDmgPct: 0, meleeDmgPct: 0, fullHpDmgPct: 0,
+    critRate: snap.cr || 0, critDmg: snap.cd || 0,
+    precRate: snap.pr || 0, precDmg: snap.pd || 0,
+    primaryWpnExtraDmg: snap.pwed || 0, abilityExtraDmg: snap.aed || 0,
+    vulnPct: snap.vuln || 0,
+    toBase: snap.toBase || 278, toWeapon: snap.toWeapon || 0,
+    toAmulet: snap.toAmulet || 0, toExclusive: snap.toExclusive || 0,
+    extMult1: snap.extMults?.[0]||1, extMult2: snap.extMults?.[1]||1,
+    extMult3: snap.extMults?.[2]||1, extMult4: snap.extMults?.[3]||1,
+    lvl21: snap.lvl21 || "none",
+  };
+  if (snap.offStats) {
+    hero.offensiveStats.forEach(os => {
+      const v = snap.offStats[os.id] || 0;
+      if (os.bucket === "totalDmg") s.totalDmgPct += v;
+      else if (os.condition === "boss")   s.bossDmgPct   += v;
+      else if (os.condition === "melee")  s.meleeDmgPct  += v;
+      else if (os.condition === "fullhp") s.fullHpDmgPct += v;
+    });
+  }
+  const cond = snap.condState || {};
+  s.activeCond = (cond.boss ? s.bossDmgPct : 0) + (cond.melee ? s.meleeDmgPct : 0) + (cond.fullhp ? s.fullHpDmgPct : 0);
+  s.totalOutput = computeTotalOutput(s.toBase, s.toWeapon, s.toAmulet, s.toExclusive);
+  s.condBoss = !!cond.boss; s.condMelee = !!cond.melee; s.condFullHp = !!cond.fullhp;
+  return s;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener("DOMContentLoaded", () => {
+  talentState = defaultTalentState();
+  gearState   = defaultGearState();
+  realmState  = defaultRealmState();
+
+  buildOffensiveStatsDOM();
+  buildBaseDamageDOM();
+  buildCondTogglesDOM();
+  buildExternalMultsDOM();
+  buildTalentTree();
+  buildGearDOM();
+  buildRealmDOM();
+  buildAbilityTabs();
+  buildPriorityRef();
+  displaySelfTest();
+
+  // Wire up all remaining DOM inputs
+  ["to-base","to-weapon","to-amulet","to-exclusive","cr","cd","pr","pd","vuln","pwed","aed"].forEach(id => {
+    const inp = el(id);
+    if (inp) inp.addEventListener("input", recalc);
+  });
+  document.querySelectorAll('input[name="lvl21"]').forEach(r => r.addEventListener("change", recalc));
+
+  recalc();
+});
+</script>
+</body>
+</html>
