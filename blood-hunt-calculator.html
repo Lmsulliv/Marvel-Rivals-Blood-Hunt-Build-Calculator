@@ -161,6 +161,38 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .scrollable::-webkit-scrollbar { width: 4px; }
 .scrollable::-webkit-scrollbar-track { background: var(--panel2); }
 .scrollable::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Grade badges */
+.grade { display:inline-block; width:18px; text-align:center; border-radius:3px; font-size:10px; font-weight:700; padding:1px 0; }
+.grade-F { background:#2a1010; color:#e05c5c; }
+.grade-D { background:#2a1f00; color:#d4843a; }
+.grade-C { background:#1a2000; color:#a8c040; }
+.grade-B { background:#0d2010; color:#4caf6e; }
+.grade-A { background:#0d2a3a; color:#4e9af1; }
+.grade-S { background:#2a1a3a; color:#c87fff; }
+
+/* Gear mod row: dropdown + value + grade */
+.gear-mod-row { display:grid; grid-template-columns:1fr 70px 22px; gap:4px; align-items:center; margin-bottom:3px; }
+.gear-mod-row select { background:var(--panel2); border:1px solid var(--border); border-radius:3px; color:var(--text); padding:2px 4px; font-size:11px; }
+.gear-mod-row select:focus { outline:none; border-color:var(--accent); }
+.gear-mod-row input[type=number] { background:var(--panel2); border:1px solid var(--border); border-radius:3px; color:var(--text); padding:2px 4px; font-size:11px; text-align:right; }
+.gear-mod-row input:focus { outline:none; border-color:var(--accent); }
+
+/* Stats mode toggle */
+.mode-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:11px; }
+.mode-btn { padding:3px 10px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); cursor:pointer; font-size:11px; }
+.mode-btn.active { border-color:var(--accent); background:#1a2d4a; color:var(--accent); }
+
+/* Item contribution summary */
+.contrib-summary { font-size:10px; color:var(--muted); margin-top:4px; padding:3px 6px; background:var(--panel2); border-radius:3px; }
+.contrib-summary span { color:var(--text); }
+
+/* All-abilities summary table */
+.ability-summary { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px; }
+.ability-summary th { color:var(--muted); font-weight:400; padding:2px 6px; border-bottom:1px solid var(--border); text-align:left; }
+.ability-summary td { padding:2px 6px; border-bottom:1px solid #1a2030; }
+.ability-summary td:last-child { text-align:right; font-family:monospace; }
+.ability-summary tr.sel td { color:var(--accent); font-weight:600; }
 </style>
 </head>
 <body>
@@ -187,9 +219,15 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   <div id="base-damage-inputs"></div>
 </div>
 
-<!-- OFFENSIVE STATS -->
+<!-- STATS MODE + OFFENSIVE STATS -->
 <div class="panel">
   <h2>Offensive Stats</h2>
+  <div class="mode-row">
+    <span style="color:var(--muted)">Stats source:</span>
+    <button class="mode-btn active" id="mode-gear-btn"   onclick="setGearMode(true)">Gear-driven</button>
+    <button class="mode-btn"        id="mode-manual-btn" onclick="setGearMode(false)">Manual</button>
+    <span style="font-size:10px;color:var(--muted)" id="mode-hint">Gear panel feeds stats</span>
+  </div>
   <div class="grid2" id="offensive-stats-inputs"></div>
 </div>
 
@@ -203,12 +241,12 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 <div class="panel">
   <h2>Total Output</h2>
   <div class="grid4">
-    <div class="field"><label>Base Output</label><input type="number" id="to-base" value="278"></div>
+    <div class="field"><label>Arcana Output</label><input type="number" id="to-base" value="0"></div>
     <div class="field"><label>Weapon Roll</label><input type="number" id="to-weapon" value="0"></div>
     <div class="field"><label>Amulet Roll</label><input type="number" id="to-amulet" value="0"></div>
     <div class="field"><label>Exclusive Roll</label><input type="number" id="to-exclusive" value="0"></div>
   </div>
-  <div style="margin-top:6px;font-size:11px;color:var(--muted)">Formula: base + 11.5×(√weapon + √amulet + √exclusive) &nbsp;→&nbsp; <span id="to-computed" style="color:var(--green);font-weight:600">278.00</span></div>
+  <div style="margin-top:6px;font-size:11px;color:var(--muted)">arcana + talent (auto) + realm (auto) + 11.5×(√weapon + √amulet + √exclusive) &nbsp;→&nbsp; <span id="to-computed" style="color:var(--green);font-weight:600">0.00</span></div>
 </div>
 
 <!-- CRIT / PRECISION -->
@@ -262,6 +300,35 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   </div>
 </div>
 
+<!-- BASE DAMAGE ESTIMATOR -->
+<div class="panel collapsible collapsed" id="estimator-panel">
+  <div class="panel-head" onclick="togglePanel('estimator-panel')"><h2 style="margin:0">Base Damage Estimator</h2></div>
+  <div class="panel-body">
+    <div class="info-box" style="margin-bottom:8px">
+      Can't unequip gear? Observe a hit in-game, enter it below, and the calculator reverses the formula to find the correct Base Damage value. Set all your other stats first so the divisors are accurate.
+    </div>
+    <div class="grid2" style="margin-bottom:6px">
+      <div class="field">
+        <label>Ability</label>
+        <select id="est-ability"></select>
+      </div>
+      <div class="field">
+        <label>Hit Type</label>
+        <select id="est-hittype">
+          <option value="normal">Normal (not crit/prec)</option>
+          <option value="crit">Critical Hit</option>
+          <option value="prec">Precision Hit</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Observed Damage (enter the number shown in-game)</label>
+      <input type="number" id="est-observed" placeholder="e.g. 450000" step="1" min="1">
+    </div>
+    <div id="est-result" style="margin-top:8px"></div>
+  </div>
+</div>
+
 <!-- SELF-TEST -->
 <div class="panel collapsible collapsed" id="test-panel">
   <div class="panel-head" onclick="togglePanel('test-panel')"><h2 style="margin:0">Self-Test</h2></div>
@@ -276,14 +343,18 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 <!-- RESULTS -->
 <div class="panel" id="results-panel">
   <h2>Results</h2>
-  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+  <table class="ability-summary">
+    <thead><tr><th>Ability (click to detail)</th><th>Avg / Hit</th><th>Raw Hit</th></tr></thead>
+    <tbody id="ability-summary-tbody"></tbody>
+  </table>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:6px">
     <div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Average Damage / Hit</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Selected ability avg</div>
       <div class="result-big" id="result-avg">—</div>
       <div class="result-sub" id="result-raw">raw: —</div>
     </div>
     <div style="flex:1;min-width:200px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Active ability:</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Detail view:</div>
       <div class="ability-tab-row" id="result-ability-tabs"></div>
     </div>
   </div>
@@ -291,7 +362,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
     <thead><tr><th>Factor</th><th>Value</th><th>Multiplier ×</th></tr></thead>
     <tbody id="breakdown-tbody"></tbody>
   </table>
-  <div id="boss-note" style="display:none" class="warn-box" style="margin-top:6px">Boss mode: boss-conditional bonus included. Boss damage is approximate due to likely enemy armor.</div>
+  <div id="boss-note" style="display:none" class="warn-box">Boss mode: boss-conditional included. Boss damage approximate (likely enemy armor).</div>
 </div>
 
 <!-- OPTIMIZER -->
@@ -341,111 +412,148 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 
 <script>
 'use strict';
+
+// ============================================================
+// MASTER STAT POOL — editable; fMin=F-tier, sMax=S-tier
+// NOTE: grade interpolation is linear (real cutoffs may not be perfectly linear)
+// ============================================================
+const STAT_POOL = {
+  totalDmg:     { label:"Total Damage Bonus %",         unit:"%",  fMin:208,  sMax:554,   bucket:"totalDmg" },
+  critRate:     { label:"Crit Rate %",                  unit:"%",  fMin:6.1,  sMax:16.2,  statKey:"critRate" },
+  precRate:     { label:"Precision Rate %",             unit:"%",  fMin:2.3,  sMax:6.2,   statKey:"precRate" },
+  hp:           { label:"Health (flat)",                unit:"",   fMin:554,  sMax:1450,  statKey:"gearHp",      defensive:true },
+  armorValue:   { label:"Armor Value",                  unit:"",   fMin:192,  sMax:512,   statKey:"gearArmor",   defensive:true },
+  dodgeRate:    { label:"Dodge Rate %",                 unit:"%",  fMin:3.2,  sMax:8.5,   statKey:"dodgeRate",   defensive:true },
+  blockRate:    { label:"Block Rate %",                 unit:"%",  fMin:7,    sMax:18.7,  statKey:"blockRate",   defensive:true },
+  totalOutput:  { label:"Total Output Boost",           unit:"",   fMin:208,  sMax:554,   bucket:"totalOutput" },
+  hpPct:        { label:"Health %",                     unit:"%",  fMin:40,   sMax:107,   defensive:true },
+  critDmg:      { label:"Crit Damage %",                unit:"%",  fMin:312,  sMax:832,   statKey:"critDmg" },
+  precDmg:      { label:"Precision Damage %",           unit:"%",  fMin:728,  sMax:1942,  statKey:"precDmg" },
+  blockDmgRed:  { label:"Block Damage Reduction",       unit:"",   fMin:86,   sMax:229,   defensive:true },
+  healCooldown: { label:"Heal Rune Cooldown Red %",     unit:"%",  fMin:29,   sMax:78,    defensive:true },
+  regenRespire: { label:"Regen/sec (Respire)",          unit:"",   fMin:135,  sMax:360,   defensive:true },
+  closeDmg:     { label:"Bonus Dmg vs Close-Range %",   unit:"%",  fMin:311,  sMax:830,   bucket:"conditional", condition:"melee" },
+  bossDmg:      { label:"Bonus Dmg vs Bosses %",        unit:"%",  fMin:311,  sMax:830,   bucket:"conditional", condition:"boss" },
+  fullHpDmg:    { label:"Bonus Dmg vs Healthy %",       unit:"%",  fMin:415,  sMax:1107,  bucket:"conditional", condition:"fullhp" },
+  killRegen:    { label:"Health on Kill",               unit:"",   fMin:20,   sMax:54,    defensive:true },
+  healCharges:  { label:"Extra Heal Rune Charges",      unit:"",   fMin:1,    sMax:3,     defensive:true },
+};
+
+// ============================================================
+// JEFF ENHANCEMENTS — talent-affix mods eligible on weapon/accessory/exclusive
+// Multiple sources of the same enhancement are ADDITIVE
+// ============================================================
+const JEFF_ENHANCEMENTS = {
+  fwd_frenzy:   { label:"Forward Frenzy Enh (Ram %)",      unit:"%", fMin:149, sMax:398, type:"abilityPct",  abilityId:"ram" },
+  unstoppable:  { label:"Un-Shark-Stoppable Enh (Ram %)",  unit:"%", fMin:33,  sMax:88,  type:"abilityPct",  abilityId:"ram" },
+  deep_breath:  { label:"Deep Breath Enh (energy/kill)",   unit:"",  fMin:11,  sMax:30,  type:"utility" },
+  bubbling_imp: { label:"Bubbling Impact Enh (flat dmg)",  unit:"",  fMin:299, sMax:797, type:"abilityFlat", abilityId:"bubble" },
+  big_fish:     { label:"Big Fish Frenzy Enh (Ult %)",     unit:"%", fMin:26,  sMax:69,  type:"abilityPct",  abilityId:"ult" },
+  hangry:       { label:"Hangry Enh (ult energy/kill)",    unit:"",  fMin:11,  sMax:30,  type:"utility" },
+  hyper_bubble: { label:"Hyper Sprint Bubble Enh (Sprint %)", unit:"%", fMin:598, sMax:1594, type:"abilityPct", abilityId:"sprint" },
+};
+
+// ============================================================
+// GEAR ELIGIBLE POOLS — editable; armor hard-excludes all damage stats
+// ============================================================
+const GEAR_ELIGIBLE_POOLS = {
+  weapon:    [...Object.keys(STAT_POOL).filter(k=>!STAT_POOL[k].defensive), ...Object.keys(JEFF_ENHANCEMENTS)],
+  armor:     Object.keys(STAT_POOL).filter(k=>STAT_POOL[k].defensive),
+  accessory: [...Object.keys(STAT_POOL), ...Object.keys(JEFF_ENHANCEMENTS)],
+  exclusive: [...Object.keys(STAT_POOL).filter(k=>!STAT_POOL[k].defensive), ...Object.keys(JEFF_ENHANCEMENTS)],
+};
+
 // ============================================================
 // DATA BLOCK — edit hero data here; never touch the engine below
 // ============================================================
-
 const HERO_DATA = {
   jeff: {
     name: "Jeff the Land Shark",
     build: "Hide & Seek (Swim)",
     totalPoints: 60,
 
-    // Abilities whose damage we track
+    // All abilities tagged "ability" for extra-damage routing (user confirmed ram = ability damage)
     abilities: [
-      { id: "ram",       label: "Ram (Collision)",      baseDmg: 0, dmgType: "primary", gearBonusKey: "wcbf" },
-      { id: "splish",    label: "Splish Splash (per stream)", baseDmg: 0, dmgType: "ability", gearBonusKey: "mouthwash" },
-      { id: "aquaburst", label: "Aqua Burst",            baseDmg: 0, dmgType: "ability" },
-      { id: "ult",       label: "Ult Swallow",           baseDmg: 0, dmgType: "ability" },
-      { id: "sprint",    label: "Hyper Sprint Dash",     baseDmg: 0, dmgType: "primary" },
-      { id: "bubble",    label: "Healing Bubble Hit",    baseDmg: 0, dmgType: "ability" },
+      { id:"ram",       label:"Ram (Collision)",           baseDmg:0, dmgType:"ability" },
+      { id:"splish",    label:"Splish Splash (per stream)", baseDmg:0, dmgType:"ability" },
+      { id:"aquaburst", label:"Aqua Burst",                 baseDmg:0, dmgType:"ability" },
+      { id:"ult",       label:"Ult Swallow",                baseDmg:0, dmgType:"ability" },
+      { id:"sprint",    label:"Hyper Sprint Dash",          baseDmg:0, dmgType:"ability" },
+      { id:"bubble",    label:"Bubble Shockwave",           baseDmg:0, dmgType:"ability", flatOnly:true },
     ],
 
-    // Special gear effects keyed by gearBonusKey
+    // Per-ability bonus sources (talent statKeys + enhancement ids)
+    // Multiple sources additive. VERIFY tags note uncertain interactions.
+    abilityBonusMap: {
+      ram:       { pctTalent:["talentRamPct","talentRamPct2"], pctEnh:["fwd_frenzy","unstoppable"], flatTalent:[], flatEnh:[] },
+      splish:    { pctTalent:["forkedStreamPct","bubbleAssaultPct","boggedDownPct"], pctEnh:[], flatTalent:[], flatEnh:[] },
+      aquaburst: { pctTalent:["reservoirPct"], pctEnh:[], flatTalent:[], flatEnh:[] },
+      bubble:    { pctTalent:[], pctEnh:[], flatTalent:["bubblingImpact","tsunami"], flatEnh:["bubbling_imp"] },
+      sprint:    { pctTalent:[], pctEnh:["hyper_bubble"], flatTalent:[], flatEnh:[] },
+      ult:       { pctTalent:["bffPct"], pctEnh:["big_fish"], flatTalent:[], flatEnh:[] },
+    },
+
+    // Special gear effects — VERIFY application order in-game
     specialGear: {
       wcbf: {
-        label: "West Coast Bionic Fin",
-        desc: "Ram gains +10390% of Hide-and-Seek base collision damage.",
-        // NOTE: verify whether this adds to base before the multiplier stack (additive to base)
-        // or acts as its own multiplier. Implemented as: extra = ram_base * (10390/100), added to baseDmg before formula.
-        compute: (ramBase) => ramBase * (10390 / 100),
+        label:"West Coast Bionic Fin",
+        desc:"Ram +10390% of base collision damage.",
+        // VERIFY: applied to measured_base only (before weapon flat) or to full base incl. weapon flat
+        // Implemented as: wcbf_bonus = measured_base * (10390/100), added to base before multiplier stack
+        compute: (ramBase) => ramBase * (10390/100),
         enabled: false,
       },
       mouthwash: {
-        label: "Skuld's Mouthwash",
-        desc: "Splish Splash gains +3000% damage as a DoT effect.",
-        // NOTE: verify whether this is a separate hit or modifies base damage. Implemented as a separate dot multiplier shown in results.
+        label:"Skuld's Mouthwash",
+        desc:"Splish Splash +3000% as separate DoT hit.",
+        // VERIFY: DoT inherits full multiplier stack vs base only. Implemented as base * 30 shown separately.
         dotPct: 3000,
         enabled: false,
       },
     },
 
-    // Offensive stat definitions (feeds UI and stats object)
     offensiveStats: [
-      { id: "totalDmg",    label: "Total Damage %",          default: 0,   bucket: "totalDmg" },
-      { id: "bossDmg",     label: "Boss Damage %",           default: 0,   bucket: "conditional", condition: "boss" },
-      { id: "meleeDmg",    label: "Melee (<5m) Damage %",    default: 0,   bucket: "conditional", condition: "melee" },
-      { id: "fullHpDmg",   label: "Full-HP Target Damage %", default: 0,   bucket: "conditional", condition: "fullhp" },
+      { id:"totalDmg",  label:"Total Damage %",          default:0, bucket:"totalDmg" },
+      { id:"bossDmg",   label:"Boss Damage %",            default:0, bucket:"conditional", condition:"boss" },
+      { id:"meleeDmg",  label:"Melee (<5m) Damage %",    default:0, bucket:"conditional", condition:"melee" },
+      { id:"fullHpDmg", label:"Full-HP Target Damage %", default:0, bucket:"conditional", condition:"fullhp" },
     ],
 
-    // Realm upgrades
     realm: [
-      { id: "realm_output",   label: "Output Boost", pctPerTier: 25, tiers: 5, statKey: "realmOutputPct",   desc: "+25% total output boost / tier" },
-      { id: "realm_hp",       label: "Health",       flatPerTier: 150, tiers: 5, statKey: "realmHp",        desc: "+150 HP / tier", defensive: true },
-      { id: "realm_drop1",    label: "KO Gear Drop %", pctPerTier: 4, tiers: 5, statKey: null,              desc: "+4% non-boss KO gear drop rate", utility: true },
-      { id: "realm_drop2",    label: "Best Gear Drop %", pctPerTier: 4, tiers: 5, statKey: null,            desc: "+4% current-difficulty best-gear drop rate", utility: true },
+      { id:"realm_output", label:"Output Boost", pctPerTier:25,  tiers:5, statKey:"realmOutputPct", desc:"+25% output boost/tier" },
+      { id:"realm_hp",     label:"Health",       flatPerTier:150, tiers:5, statKey:"realmHp",       desc:"+150 HP/tier", defensive:true },
+      { id:"realm_drop1",  label:"KO Drop %",    pctPerTier:4,   tiers:5, statKey:null,             desc:"+4% non-boss KO gear drop", utility:true },
+      { id:"realm_drop2",  label:"Best Drop %",  pctPerTier:4,   tiers:5, statKey:null,             desc:"+4% best-gear drop", utility:true },
     ],
 
-    // Gear slots
+    // ONE item equipped per slot. Slots with choices show a selector.
     gear: {
-      weapon: [
-        {
-          id: "deep_sea_propellor", label: "Deep Sea Propellor (swim)",
-          baseStatLabel: "Ram Dmg +", baseStatKey: "weaponFlatRam", baseDefault: 1000,
-          modSlots: 5,
-          preferred: ["Total Dmg","TO","Boss/Melee/Full-HP","Talent affix","CR/CD","PD","CR","PR"],
-        },
-        {
-          id: "kraken_blaster", label: "Kraken Blaster (spit — alt)",
-          baseStatLabel: "Splish Dmg +", baseStatKey: "weaponFlatSplish", baseDefault: 400,
-          modSlots: 5,
-          preferred: ["Total Dmg","TO","Boss/Melee/Full-HP","Talent affix","CR/CD"],
-        },
-      ],
-      armor: [
-        {
-          id: "armor1", label: "Armor",
-          baseStatLabel: "HP +", baseStatKey: "armorHp", baseDefault: 2419,
-          subBaseLabel: "Armor +", subBaseKey: "armorValue", subBaseDefault: 438,
-          modSlots: 5, defensive: true,
-          preferred: ["HP","Armor","Block/Block%","Heal regen","Kill regen","HP%","Dodge%","Heal cooldown","Heal amount"],
-        },
-      ],
-      accessory: [
-        {
-          id: "accessory1", label: "Accessory (Amulet)",
-          baseStatLabel: "Crit Rate +", baseStatKey: "accCr", baseDefault: 16.2,
-          subBaseLabel: "Block Rate +", subBaseKey: "accBlock", subBaseDefault: 18.5,
-          modSlots: 5,
-          preferred: ["TO","Boss/Melee/Full-HP","Armor","HP","CR/CD","PD","Block/Block%","Total Dmg","PR","Kill regen","Heal regen","Dodge%","Heal cooldown","Heal amount","Talent affix"],
-        },
-      ],
-      exclusive: [
-        {
-          id: "wcbf_gear", label: "West Coast Bionic Fin",
-          baseStatLabel: "Special", baseStatKey: null, baseDefault: 0,
-          note: "Ram +10390% of base collision damage (see special gear toggle)",
-          modSlots: 5,
-          preferred: ["TO","Boss/Melee/Full-HP","HP","Armor","CR/CD","PR/PD","Block%","Talent affix"],
-        },
-        {
-          id: "mouthwash_gear", label: "Skuld's Mouthwash",
-          baseStatLabel: "Special", baseStatKey: null, baseDefault: 0,
-          note: "Splish Splash +3000% damage as DoT (see special gear toggle)",
-          modSlots: 5,
-          preferred: ["TO","Boss/Melee/Full-HP","HP","Armor","CR/CD","PR/PD","Block%","Talent affix"],
-        },
-      ],
+      weapon: {
+        label:"Weapon", gearType:"weapon", equippedDefault:"deep_sea_propellor",
+        items:[
+          { id:"deep_sea_propellor", label:"Deep Sea Propellor (swim)", baseStatLabel:"Ram Dmg +", baseStatKey:"weaponFlatRam", baseDefault:1000 },
+          { id:"kraken_blaster",     label:"Kraken Blaster (spit)",     baseStatLabel:"Splish Dmg +", baseStatKey:"weaponFlatSplish", baseDefault:400 },
+        ],
+      },
+      armor: {
+        label:"Armor", gearType:"armor", equippedDefault:"armor1",
+        items:[
+          { id:"armor1", label:"Armor", baseStatLabel:"HP +", baseStatKey:"armorHp", baseDefault:2419, subBaseLabel:"Armor Value +", subBaseKey:"armorValue", subBaseDefault:438 },
+        ],
+      },
+      accessory: {
+        label:"Accessory", gearType:"accessory", equippedDefault:"accessory1",
+        items:[
+          { id:"accessory1", label:"Accessory", baseStatLabel:"Crit Rate +", baseStatKey:"accCr", baseDefault:16.2, subBaseLabel:"Block Rate +", subBaseKey:"accBlock", subBaseDefault:18.5 },
+        ],
+      },
+      exclusive: {
+        label:"Exclusive", gearType:"exclusive", equippedDefault:null,
+        items:[
+          { id:"wcbf_gear",      label:"West Coast Bionic Fin", baseStatKey:null, baseDefault:0, note:"See 'WCBF' toggle in Base Damage" },
+          { id:"mouthwash_gear", label:"Skuld's Mouthwash",      baseStatKey:null, baseDefault:0, note:"See 'Mouthwash' toggle in Base Damage" },
+        ],
+      },
     },
 
     // Talent tree definition
@@ -519,7 +627,7 @@ const HERO_DATA = {
         lines: [
           { id: "l10_bdr",   label: "Block Damage Reduction (main)", statKey: "blockDmgRed", flatPerTier: 15, maxTiers: 5, min: 0, defensive: true },
           { id: "l10_unstp", label: "Un-Shark-Stoppable (+30% ram/tier)", statKey: "talentRamPct2", pctPerTier: 30, maxTiers: 3, min: 0, sub: true },
-          { id: "l10_res",   label: "Reservoir (+3% Aqua Burst dmg+radius/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+          { id: "l10_res",   label: "Reservoir (+3% Aqua Burst dmg+radius/tier)", statKey: "reservoirPct", pctPerTier: 3, maxTiers: 3, min: 0, sub: true },
         ],
       },
       {
@@ -550,7 +658,7 @@ const HERO_DATA = {
         lines: [
           { id: "l14_dodge",  label: "Dodge Rate +1%/tier", statKey: "dodgeRate", pctPerTier: 1, maxTiers: 5, min: 0, defensive: true },
           { id: "l14_bubble", label: "Bubble Bath (cast bubble during Hide and Seek)", statKey: null, maxTiers: 1, min: 0, sub: true },
-          { id: "l14_bog",    label: "Bogged Down (Splish slows, +10% dmg up to 30%, pierce)", statKey: null, maxTiers: 1, min: 0, sub: true },
+          { id: "l14_bog",    label: "Bogged Down (Splish slows, +10% dmg, pierce)", statKey: "boggedDownPct", pctPerTier: 10, maxTiers: 1, min: 0, sub: true },
         ],
       },
       {
@@ -564,7 +672,7 @@ const HERO_DATA = {
         lines: [
           { id: "l16_armor",   label: "Armor +50/tier", statKey: "armor2", flatPerTier: 50, maxTiers: 5, min: 0, defensive: true },
           { id: "l16_bubblei", label: "Bubbling Impact (+150 shockwave/tier)", statKey: "bubblingImpact", flatPerTier: 150, maxTiers: 3, min: 0, sub: true },
-          { id: "l16_bubbleas",label: "Bubble Assault (+33% Splish-bubble pop/tier)", statKey: null, maxTiers: 3, min: 0, sub: true },
+          { id: "l16_bubbleas",label: "Bubble Assault (+33% Splish-bubble pop/tier)", statKey: "bubbleAssaultPct", pctPerTier: 33, maxTiers: 3, min: 0, sub: true },
         ],
       },
       {
@@ -664,12 +772,18 @@ function computeTotalOutput(base, nWeapon, nAmulet, nExclusive) {
 
 /**
  * Core damage formula.
- * @param {object} s - flat stats object
- * @param {number} baseDmg - base_weapon_damage for this ability
- * @param {string} dmgType - "primary" | "ability"
+ * @param {object} s        - flat stats object
+ * @param {number} baseDmg  - base_weapon_damage for this ability
+ * @param {string} dmgType  - "primary" | "ability"
+ * @param {number} [abilityFlatBonus=0] - flat additions for this ability (before multiplier stack)
+ * @param {number} [abilityPct=0]       - ability-specific % bonus (additive, applied after flat, before global mults)
  * @returns {object} { rawHit, avgHit, breakdown }
+ * Self-tests pass abilityFlatBonus=0, abilityPct=0 → results unchanged.
  */
-function computeDamage(s, baseDmg, dmgType) {
+function computeDamage(s, baseDmg, dmgType, abilityFlatBonus, abilityPct) {
+  abilityFlatBonus = abilityFlatBonus || 0;
+  abilityPct       = abilityPct       || 0;
+  const effectiveBase = baseDmg + abilityFlatBonus;
   const totalOutput = s.totalOutput;
 
   // Level-21 multiplicative node
@@ -681,20 +795,20 @@ function computeDamage(s, baseDmg, dmgType) {
 
   const cr = s.critRate;
   const pr = s.precRate;
-
   const activeCond = s.activeCond;
 
-  const pwebPct  = (dmgType === "primary") ? s.primaryWpnExtraDmg : 0;
-  const aedPct   = (dmgType === "ability") ? s.abilityExtraDmg    : 0;
+  const pwebPct = (dmgType === "primary") ? s.primaryWpnExtraDmg : 0;
+  const aedPct  = (dmgType === "ability") ? s.abilityExtraDmg    : 0;
 
-  // raw_hit_damage
+  // raw_hit_damage (ability-specific % inserted first per spec)
+  const fa = 1 + abilityPct / 100;
   const f1 = 1 + (s.totalDmgPct + activeCond) / 100;
   const f2 = 1 + totalOutput / 100;
   const f3 = 1 + s.vulnPct / 100;
   const f4 = 1 + pwebPct / 100;
   const f5 = 1 + aedPct / 100;
 
-  const rawHit = baseDmg * f1 * f2 * f3 * f4 * f5;
+  const rawHit = effectiveBase * fa * f1 * f2 * f3 * f4 * f5;
 
   // Crit/prec amortised multiplier
   // E[mult] = 1 + CR/100 * (CD/100 - 1) + PR/100 * (PD/100 - 1)
@@ -706,59 +820,82 @@ function computeDamage(s, baseDmg, dmgType) {
   const avgHit = rawHit * critMult * extMult;
 
   const breakdown = [
-    { label: "Base Damage",           value: fmt(baseDmg),            mult: null },
-    { label: "× (1 + TotalDmg + Cond)/100", value: `TotalDmg=${s.totalDmgPct.toFixed(1)}% Cond=${activeCond.toFixed(1)}%`, mult: f1.toFixed(4) },
-    { label: "× (1 + TotalOutput/100)",     value: `TO=${totalOutput.toFixed(2)}`,   mult: f2.toFixed(4) },
-    { label: "× (1 + Vuln/100)",            value: `Vuln=${s.vulnPct}%`,             mult: f3.toFixed(4) },
-    { label: "× (1 + PrimaryWpnExtra/100)", value: `${pwebPct.toFixed(1)}%`,         mult: f4.toFixed(4), dim: pwebPct === 0 },
-    { label: "× (1 + AbilityExtra/100)",    value: `${aedPct.toFixed(1)}%`,          mult: f5.toFixed(4), dim: aedPct === 0 },
-    { label: "= Raw Hit",                   value: fmt(rawHit),                       mult: null, highlight: true },
-    { label: "× Crit/Prec (amortised)",     value: `CR=${cr}% CD=${cd}% PR=${pr}% PD=${pd}%`, mult: critMult.toFixed(4) },
-    { label: "× External Mults",            value: `${s.extMult1}×${s.extMult2}×${s.extMult3}×${s.extMult4}`, mult: extMult.toFixed(4) },
-    { label: "= Avg Dmg / Hit",             value: fmt(avgHit),                       mult: null, highlight: true },
+    { label: "Base + FlatBonus",             value: `${fmt(baseDmg)}${abilityFlatBonus?` + ${fmt(abilityFlatBonus)}`:""}`, mult: null },
+    { label: "× (1 + AbilityPct/100)",       value: `${abilityPct.toFixed(1)}%`, mult: fa.toFixed(4), dim: abilityPct===0 },
+    { label: "× (1 + TotalDmg+Cond)/100",   value: `TotalDmg=${s.totalDmgPct.toFixed(1)}% Cond=${activeCond.toFixed(1)}%`, mult: f1.toFixed(4) },
+    { label: "× (1 + TotalOutput/100)",      value: `TO=${totalOutput.toFixed(2)}`, mult: f2.toFixed(4) },
+    { label: "× (1 + Vuln/100)",             value: `Vuln=${s.vulnPct}%`,           mult: f3.toFixed(4) },
+    { label: "× (1 + PrimaryWpnExtra/100)",  value: `${pwebPct.toFixed(1)}%`,       mult: f4.toFixed(4), dim: pwebPct===0 },
+    { label: "× (1 + AbilityExtra/100)",     value: `${aedPct.toFixed(1)}%`,        mult: f5.toFixed(4), dim: aedPct===0 },
+    { label: "= Raw Hit",                    value: fmt(rawHit),                     mult: null, highlight: true },
+    { label: "× Crit/Prec (amortised)",      value: `CR=${cr}% CD=${cd}% PR=${pr}% PD=${pd}%`, mult: critMult.toFixed(4) },
+    { label: "× External Mults",             value: `${s.extMult1}×${s.extMult2}×${s.extMult3}×${s.extMult4}`, mult: extMult.toFixed(4) },
+    { label: "= Avg Dmg / Hit",              value: fmt(avgHit),                     mult: null, highlight: true },
   ];
 
-  return { rawHit, avgHit, breakdown, cd, pd, critMult, extMult, f1, f2, f3, f4, f5, totalOutput };
+  return { rawHit, avgHit, breakdown, cd, pd, critMult, extMult, fa, f1, f2, f3, f4, f5, totalOutput };
 }
 
 // ============================================================
-// OPTIMIZER — marginal analysis
+// OPTIMIZER — marginal analysis with S-tier increments + talent coeff
 // ============================================================
-function computeOptimizer(s, baseDmg, dmgType) {
-  const base = computeDamage(s, baseDmg, dmgType).avgHit;
+
+// Talent-tree coefficient for CD/PD affix scaling.
+// VERIFY in-game: coeff = level-21 multiplicative node value.
+// When adding a raw CD affix, displayed CD increases by affix * coeff.
+// coeff=1.5 (×1.5 crit node), 2.0 (×2.0 prec node), 1.0 (none).
+function getTalentCoeff(s, stat) {
+  if (stat === "critDmg") return s.lvl21 === "crit" ? 1.5 : 1.0;
+  if (stat === "precDmg") return s.lvl21 === "prec" ? 2.0 : 1.0;
+  return 1.0;
+}
+
+function computeOptimizer(s, baseDmg, dmgType, abilityFlatBonus, abilityPct) {
+  abilityFlatBonus = abilityFlatBonus || 0;
+  abilityPct       = abilityPct       || 0;
+  const base = computeDamage(s, baseDmg, dmgType, abilityFlatBonus, abilityPct).avgHit;
   if (base === 0) return [];
 
-  const delta = 1; // 1 percentage point increment
-
-  function marginal(key, increment) {
-    const sNew = Object.assign({}, s, { [key]: (s[key] || 0) + increment });
-    return (computeDamage(sNew, baseDmg, dmgType).avgHit - base) / base * 100;
+  function marginal(key, inc) {
+    const sNew = Object.assign({}, s, { [key]: (s[key]||0) + inc });
+    return (computeDamage(sNew, baseDmg, dmgType, abilityFlatBonus, abilityPct).avgHit - base) / base * 100;
   }
-
   function marginalOutput(slot) {
-    const keys = { weapon: "toWeapon", amulet: "toAmulet", exclusive: "toExclusive" };
-    const k = keys[slot];
-    const cur = s[k] || 0;
-    const newTO = computeTotalOutput(s.toBase, slot === "weapon" ? cur + delta : s.toWeapon, slot === "amulet" ? cur + delta : s.toAmulet, slot === "exclusive" ? cur + delta : s.toExclusive);
+    const kmap = { weapon:"toWeapon", amulet:"toAmulet", exclusive:"toExclusive" };
+    const k = kmap[slot];
+    const inc = STAT_POOL.totalOutput.sMax; // S-tier roll increment
+    const newTO = computeTotalOutput(s.toBase,
+      slot==="weapon"    ? (s.toWeapon||0)+inc    : s.toWeapon,
+      slot==="amulet"    ? (s.toAmulet||0)+inc    : s.toAmulet,
+      slot==="exclusive" ? (s.toExclusive||0)+inc : s.toExclusive);
     const sNew = Object.assign({}, s, { totalOutput: newTO });
-    return (computeDamage(sNew, baseDmg, dmgType).avgHit - base) / base * 100;
+    return (computeDamage(sNew, baseDmg, dmgType, abilityFlatBonus, abilityPct).avgHit - base) / base * 100;
+  }
+  function marginalCoeff(key) {
+    const raw = STAT_POOL[key].sMax;
+    const eff = raw * getTalentCoeff(s, key); // displayed stat increase = raw * coeff
+    return marginal(key, eff);
   }
 
   const results = [
-    { stat: "Total Damage (+1%)",           gain: marginal("totalDmgPct", delta) },
-    { stat: "Boss Cond (+1%)",              gain: s.condBoss   ? marginal("activeCond", delta) : NaN, note: "toggle boss ON to see" },
-    { stat: "Melee Cond (+1%)",             gain: s.condMelee  ? marginal("activeCond", delta) : NaN, note: "toggle melee ON to see" },
-    { stat: "FullHP Cond (+1%)",            gain: s.condFullHp ? marginal("activeCond", delta) : NaN, note: "toggle full-HP ON to see" },
-    { stat: "Total Output — Weapon (+1)",   gain: marginalOutput("weapon") },
-    { stat: "Total Output — Amulet (+1)",   gain: marginalOutput("amulet") },
-    { stat: "Total Output — Exclusive (+1)",gain: marginalOutput("exclusive") },
-    { stat: "Vulnerability (+1%)",          gain: marginal("vulnPct", delta) },
-    { stat: dmgType==="primary" ? "Primary Wpn Extra (+1%)" : "Ability Extra (+1%)", gain: dmgType==="primary" ? marginal("primaryWpnExtraDmg", delta) : marginal("abilityExtraDmg", delta) },
-    { stat: "Crit Rate (+1%)",              gain: marginal("critRate", delta) },
-    { stat: "Crit Damage (+1%)",            gain: marginal("critDmg", delta) },
-    { stat: "Prec Rate (+1%)",              gain: marginal("precRate", delta) },
-    { stat: "Prec Damage (+1%)",            gain: marginal("precDmg", delta) },
-  ].filter(r => !isNaN(r.gain)).sort((a, b) => b.gain - a.gain);
+    { stat:`Total Damage (+S:${STAT_POOL.totalDmg.sMax}%)`,        perS: marginal("totalDmgPct", STAT_POOL.totalDmg.sMax),    perUnit: marginal("totalDmgPct",1) },
+    { stat:`Boss Cond (+S:${STAT_POOL.bossDmg.sMax}%)`,            perS: s.condBoss   ? marginal("activeCond", STAT_POOL.bossDmg.sMax)   : NaN, perUnit: marginal("activeCond",1) },
+    { stat:`Melee Cond (+S:${STAT_POOL.closeDmg.sMax}%)`,          perS: s.condMelee  ? marginal("activeCond", STAT_POOL.closeDmg.sMax)  : NaN, perUnit: marginal("activeCond",1) },
+    { stat:`FullHP Cond (+S:${STAT_POOL.fullHpDmg.sMax}%)`,        perS: s.condFullHp ? marginal("activeCond", STAT_POOL.fullHpDmg.sMax) : NaN, perUnit: marginal("activeCond",1) },
+    { stat:`TO Weapon (+S:${STAT_POOL.totalOutput.sMax})`,          perS: marginalOutput("weapon"),    perUnit: null },
+    { stat:`TO Amulet (+S:${STAT_POOL.totalOutput.sMax})`,          perS: marginalOutput("amulet"),    perUnit: null },
+    { stat:`TO Exclusive (+S:${STAT_POOL.totalOutput.sMax})`,       perS: marginalOutput("exclusive"), perUnit: null },
+    { stat:`Vuln (+1%)`,                                            perS: marginal("vulnPct",1),       perUnit: marginal("vulnPct",1) },
+    { stat:`Ability Extra Dmg (+1%)`,                               perS: marginal("abilityExtraDmg",1), perUnit: marginal("abilityExtraDmg",1) },
+    { stat:`Crit Rate (+S:${STAT_POOL.critRate.sMax}%)`,            perS: marginal("critRate", STAT_POOL.critRate.sMax), perUnit: marginal("critRate",1) },
+    { stat:`Crit Dmg (+S:${STAT_POOL.critDmg.sMax}% ×coeff)`,      perS: marginalCoeff("critDmg"),    perUnit: marginal("critDmg",1) },
+    { stat:`Prec Rate (+S:${STAT_POOL.precRate.sMax}%)`,            perS: marginal("precRate", STAT_POOL.precRate.sMax), perUnit: marginal("precRate",1) },
+    { stat:`Prec Dmg (+S:${STAT_POOL.precDmg.sMax}% ×coeff)`,      perS: marginalCoeff("precDmg"),    perUnit: marginal("precDmg",1) },
+  ].filter(r => !isNaN(r.perS)).sort((a,b) => b.perS - a.perS);
+
+  // HOOK: future full combinatorial "best possible build" search across all 4 items
+  // under eligibility rules. Implement as: iterateCombinations(equippedGear, GEAR_ELIGIBLE_POOLS, STAT_POOL)
+  // scoring each combination with computeDamage, returning top N builds.
 
   return results;
 }
@@ -810,12 +947,13 @@ function togglePanel(id) { el(id).classList.toggle("collapsed"); }
 // STATE
 // ============================================================
 const hero = HERO_DATA.jeff;
-let state = {};         // flat computed stats for current ability
-let talentState = {};   // id -> tier count
-let gearState = {};     // gearId -> { base, mods: [v,v,v,v,v] }
-let realmState = {};    // id -> tier
-let condState = { boss: false, melee: false, fullhp: false };
+let talentState = {};
+let gearState = {};      // itemId -> { base, sub, mods:[{statId,val}×5] }
+let equippedGear = {};   // slotType -> itemId
+let realmState = {};
+let condState = { boss:false, melee:false, fullhp:false, bff:false };
 let activeAbility = hero.abilities[0].id;
+let gearDrivenMode = true;
 let buildB = null;
 
 // ============================================================
@@ -835,12 +973,28 @@ function defaultTalentState() {
 
 function defaultGearState() {
   const g = {};
-  Object.values(hero.gear).forEach(slots => {
-    slots.forEach(slot => {
-      g[slot.id] = { base: slot.baseDefault || 0, sub: slot.subBaseDefault || 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
+  Object.values(hero.gear).forEach(slot => {
+    slot.items.forEach(item => {
+      g[item.id] = { base: item.baseDefault||0, sub: item.subBaseDefault||0,
+        mods: [{statId:null,val:0},{statId:null,val:0},{statId:null,val:0},{statId:null,val:0},{statId:null,val:0}] };
     });
   });
   return g;
+}
+
+function defaultEquippedGear() {
+  const e = {};
+  Object.entries(hero.gear).forEach(([type, slot]) => { e[type] = slot.equippedDefault; });
+  return e;
+}
+
+function calcGrade(statId, val) {
+  const def = STAT_POOL[statId] || JEFF_ENHANCEMENTS[statId];
+  if (!def || !def.fMin) return "";
+  const t = (val - def.fMin) / (def.sMax - def.fMin);
+  if (t >= 1.0) return "S"; if (t >= 0.8) return "A";
+  if (t >= 0.6) return "B"; if (t >= 0.4) return "C";
+  if (t >= 0.2) return "D"; return "F";
 }
 
 function defaultRealmState() {
@@ -850,10 +1004,11 @@ function defaultRealmState() {
 }
 
 function resetToDefaults() {
-  talentState = defaultTalentState();
-  gearState   = defaultGearState();
-  realmState  = defaultRealmState();
-  condState   = { boss: false, melee: false, fullhp: false };
+  talentState  = defaultTalentState();
+  gearState    = defaultGearState();
+  equippedGear = defaultEquippedGear();
+  realmState   = defaultRealmState();
+  condState    = { boss:false, melee:false, fullhp:false, bff:false };
   activeAbility = hero.abilities[0].id;
 
   // Reset DOM inputs
@@ -861,7 +1016,7 @@ function resetToDefaults() {
     const inp = el("base_" + ab.id);
     if (inp) inp.value = ab.baseDmg;
   });
-  el("to-base").value = 278;
+  el("to-base").value = 0;
   el("to-weapon").value = 0;
   el("to-amulet").value = 0;
   el("to-exclusive").value = 0;
@@ -976,79 +1131,177 @@ function syncTalentDOM() {
 }
 
 // ============================================================
-// BUILD GEAR DOM
+// BUILD GEAR DOM — one slot per type, item selector, dropdown mods, grade badges
 // ============================================================
 function buildGearDOM() {
   const body = el("gear-body");
   body.innerHTML = "";
 
-  Object.entries(hero.gear).forEach(([cat, slots]) => {
-    const catHead = document.createElement("h3");
-    catHead.style = "margin-top:8px;";
-    catHead.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-    body.appendChild(catHead);
-
-    slots.forEach(slot => {
-      const gs = gearState[slot.id] || { base: slot.baseDefault || 0, sub: slot.subBaseDefault || 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
-
-      const wrap = document.createElement("div");
-      wrap.className = "gear-slot";
-
-      let html = `<h3>${slot.label}</h3>`;
-      if (slot.note) html += `<div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">${slot.note}</div>`;
-
-      if (slot.baseStatKey) {
-        html += `<div class="mod-row"><span>${slot.baseStatLabel}</span><input type="number" id="gear_${slot.id}_base" value="${gs.base}" step="1" data-gear="${slot.id}" data-key="base"></div>`;
-      }
-      if (slot.subBaseKey) {
-        html += `<div class="mod-row"><span>${slot.subBaseLabel}</span><input type="number" id="gear_${slot.id}_sub" value="${gs.sub}" step="0.1" data-gear="${slot.id}" data-key="sub"></div>`;
-      }
-
-      html += `<div style="font-size:10px;color:var(--muted);margin:4px 0 2px;">Modifiers (value only — label optional):</div>`;
-      for (let i = 0; i < slot.modSlots; i++) {
-        html += `<div class="mod-row">
-          <input type="text" placeholder="stat" id="gear_${slot.id}_modlabel_${i}" value="${gs.modStats[i]||''}" style="font-size:10px;" data-gear="${slot.id}" data-modlabel="${i}">
-          <input type="number" placeholder="val" id="gear_${slot.id}_mod_${i}" value="${gs.mods[i]||0}" step="0.01" data-gear="${slot.id}" data-mod="${i}">
-        </div>`;
-      }
-      if (slot.preferred) {
-        html += `<div style="font-size:10px;color:var(--muted);margin-top:3px;">Preferred: ${slot.preferred.join(" › ")}</div>`;
-      }
-
-      wrap.innerHTML = html;
-      body.appendChild(wrap);
-
-      // Attach events
-      wrap.querySelectorAll("input[data-gear]").forEach(inp => {
-        inp.addEventListener("input", () => {
-          const gid = inp.dataset.gear;
-          if (!gearState[gid]) gearState[gid] = { base: 0, sub: 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
-          if (inp.dataset.key === "base") gearState[gid].base = parseFloat(inp.value) || 0;
-          else if (inp.dataset.key === "sub") gearState[gid].sub = parseFloat(inp.value) || 0;
-          else if (inp.dataset.mod !== undefined) gearState[gid].mods[parseInt(inp.dataset.mod)] = parseFloat(inp.value) || 0;
-          else if (inp.dataset.modlabel !== undefined) gearState[gid].modStats[parseInt(inp.dataset.modlabel)] = inp.value;
-          recalc();
-        });
-      });
-    });
+  Object.entries(hero.gear).forEach(([slotType, slotDef]) => {
+    const wrap = document.createElement("div");
+    wrap.className = "gear-slot";
+    wrap.id = "gear-wrap-" + slotType;
+    body.appendChild(wrap);
+    renderGearSlot(slotType, slotDef, wrap);
   });
 }
 
-function syncGearDOM() {
-  Object.entries(hero.gear).forEach(([, slots]) => {
-    slots.forEach(slot => {
-      const gs = gearState[slot.id] || { base: 0, sub: 0, mods: [0,0,0,0,0], modStats: ["","","","",""] };
-      const bInp = el(`gear_${slot.id}_base`);
-      if (bInp) bInp.value = gs.base;
-      const sInp = el(`gear_${slot.id}_sub`);
-      if (sInp) sInp.value = gs.sub;
-      for (let i = 0; i < (slot.modSlots || 5); i++) {
-        const mInp = el(`gear_${slot.id}_mod_${i}`);
-        if (mInp) mInp.value = gs.mods[i] || 0;
-        const mlInp = el(`gear_${slot.id}_modlabel_${i}`);
-        if (mlInp) mlInp.value = gs.modStats[i] || "";
-      }
+function renderGearSlot(slotType, slotDef, wrap) {
+  wrap.innerHTML = "";
+  const equippedId = equippedGear[slotType];
+  const itemDef = equippedId ? slotDef.items.find(i => i.id === equippedId) : null;
+  const pool = GEAR_ELIGIBLE_POOLS[slotDef.gearType] || [];
+
+  let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+    <h3 style="margin:0">${slotDef.label}</h3>`;
+
+  if (slotDef.items.length > 1 || slotDef.equippedDefault === null) {
+    html += `<select id="gear_sel_${slotType}" style="font-size:11px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;">`;
+    if (slotDef.equippedDefault === null) html += `<option value="">— none —</option>`;
+    slotDef.items.forEach(it => {
+      html += `<option value="${it.id}"${equippedId===it.id?" selected":""}>${it.label}</option>`;
     });
+    html += `</select>`;
+  } else {
+    html += `<span style="font-size:11px;color:var(--muted)">${itemDef ? itemDef.label : ""}</span>`;
+  }
+
+  html += `<button class="btn secondary" style="padding:2px 7px;font-size:11px;margin-left:auto" onclick="fillSTier('${slotType}')">S-tier</button>
+    <button class="btn secondary" style="padding:2px 7px;font-size:11px" onclick="clearGearMods('${slotType}')">Clear</button>
+  </div>`;
+
+  if (itemDef) {
+    if (itemDef.note) html += `<div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">${itemDef.note}</div>`;
+    if (itemDef.baseStatKey) {
+      const gs = gearState[itemDef.id] || {};
+      html += `<div class="mod-row" style="margin-bottom:4px;"><span style="font-size:11px;color:var(--muted)">${itemDef.baseStatLabel}</span>
+        <input type="number" id="gear_${itemDef.id}_base" value="${gs.base||0}" step="0.1" style="width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 5px;font-size:11px;">
+      </div>`;
+      if (itemDef.subBaseKey) {
+        html += `<div class="mod-row" style="margin-bottom:4px;"><span style="font-size:11px;color:var(--muted)">${itemDef.subBaseLabel}</span>
+          <input type="number" id="gear_${itemDef.id}_sub" value="${gs.sub||0}" step="0.1" style="width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 5px;font-size:11px;">
+        </div>`;
+      }
+    }
+
+    html += `<div style="font-size:10px;color:var(--muted);margin:4px 0 2px;">5 Modifiers (5 distinct stats):</div>`;
+    const gs = gearState[itemDef.id] || { mods:[{},{},{},{},{}] };
+    for (let i = 0; i < 5; i++) {
+      const mod = gs.mods[i] || { statId:null, val:0 };
+      const grade = mod.statId && mod.val ? calcGrade(mod.statId, mod.val) : "";
+      const gradeClass = grade ? `grade grade-${grade}` : "grade";
+      html += `<div class="gear-mod-row">
+        <select id="gear_${itemDef.id}_mod_stat_${i}" data-item="${itemDef.id}" data-mi="${i}" data-field="stat">
+          <option value="">— none —</option>`;
+      pool.forEach(sid => {
+        const def2 = STAT_POOL[sid] || JEFF_ENHANCEMENTS[sid];
+        if (!def2) return;
+        html += `<option value="${sid}"${mod.statId===sid?" selected":""}>${def2.label}</option>`;
+      });
+      html += `</select>
+        <input type="number" id="gear_${itemDef.id}_mod_val_${i}" value="${mod.val||0}" step="0.01" data-item="${itemDef.id}" data-mi="${i}" data-field="val">
+        <span id="gear_${itemDef.id}_grade_${i}" class="${gradeClass}">${grade}</span>
+      </div>`;
+    }
+    html += `<div class="contrib-summary" id="gear_contrib_${itemDef.id}"></div>`;
+  } else {
+    html += `<div style="font-size:11px;color:var(--muted);padding:4px 0">No item equipped.</div>`;
+  }
+
+  wrap.innerHTML = html;
+
+  // Item selector change
+  const sel = el("gear_sel_" + slotType);
+  if (sel) sel.addEventListener("change", e => {
+    equippedGear[slotType] = e.target.value || null;
+    renderGearSlot(slotType, slotDef, wrap);
+    recalc();
+  });
+
+  // Base stat inputs
+  if (itemDef) {
+    const bInp = el(`gear_${itemDef.id}_base`);
+    if (bInp) bInp.addEventListener("input", e => { if(!gearState[itemDef.id]) gearState[itemDef.id]={base:0,sub:0,mods:[{},{},{},{},{}]}; gearState[itemDef.id].base=parseFloat(e.target.value)||0; recalc(); });
+    const sInp = el(`gear_${itemDef.id}_sub`);
+    if (sInp) sInp.addEventListener("input", e => { if(!gearState[itemDef.id]) gearState[itemDef.id]={base:0,sub:0,mods:[{},{},{},{},{}]}; gearState[itemDef.id].sub=parseFloat(e.target.value)||0; recalc(); });
+
+    // Mod row inputs
+    wrap.querySelectorAll("[data-item]").forEach(inp => {
+      if (!inp.dataset.mi) return;
+      inp.addEventListener("change", () => updateGearMod(itemDef.id, parseInt(inp.dataset.mi), wrap, itemDef));
+      inp.addEventListener("input",  () => updateGearMod(itemDef.id, parseInt(inp.dataset.mi), wrap, itemDef));
+    });
+  }
+}
+
+function updateGearMod(itemId, mi, wrap, itemDef) {
+  if (!gearState[itemId]) gearState[itemId] = { base:0, sub:0, mods:[{},{},{},{},{}] };
+  const statEl = el(`gear_${itemId}_mod_stat_${mi}`);
+  const valEl  = el(`gear_${itemId}_mod_val_${mi}`);
+  const grEl   = el(`gear_${itemId}_grade_${mi}`);
+  const statId = statEl ? statEl.value || null : null;
+  const val    = valEl  ? parseFloat(valEl.value)||0 : 0;
+  gearState[itemId].mods[mi] = { statId, val };
+  if (grEl) {
+    const g = statId && val ? calcGrade(statId, val) : "";
+    grEl.className = g ? `grade grade-${g}` : "grade";
+    grEl.textContent = g;
+  }
+  updateGearContrib(itemId);
+  recalc();
+}
+
+function updateGearContrib(itemId) {
+  const el2 = el(`gear_contrib_${itemId}`);
+  if (!el2) return;
+  const gs = gearState[itemId];
+  if (!gs) { el2.innerHTML = ""; return; }
+  const parts = [];
+  gs.mods.forEach(m => {
+    if (!m.statId || !m.val) return;
+    const def = STAT_POOL[m.statId] || JEFF_ENHANCEMENTS[m.statId];
+    if (def) parts.push(`<span>${def.label.replace(" Bonus","").replace(" %","")}: <span style="color:var(--green)">${m.val}${def.unit||""}</span></span>`);
+  });
+  el2.innerHTML = parts.length ? parts.join(" &nbsp;·&nbsp; ") : "No modifiers set";
+}
+
+function fillSTier(slotType) {
+  const slotDef = hero.gear[slotType];
+  const itemId  = equippedGear[slotType];
+  if (!itemId) return;
+  const pool = GEAR_ELIGIBLE_POOLS[slotDef.gearType] || [];
+  if (!gearState[itemId]) gearState[itemId] = { base:0, sub:0, mods:[{},{},{},{},{}] };
+  // Fill top 5 distinct stats from pool at S-tier max
+  const used = new Set(gearState[itemId].mods.filter(m=>m.statId).map(m=>m.statId));
+  let filled = 0;
+  for (const sid of pool) {
+    if (filled >= 5) break;
+    const def = STAT_POOL[sid] || JEFF_ENHANCEMENTS[sid];
+    if (!def || !def.sMax) continue;
+    gearState[itemId].mods[filled] = { statId: sid, val: def.sMax };
+    filled++;
+  }
+  syncGearDOM();
+  recalc();
+}
+
+function clearGearMods(slotType) {
+  const itemId = equippedGear[slotType];
+  if (!itemId) return;
+  if (!gearState[itemId]) gearState[itemId] = { base:0, sub:0, mods:[{},{},{},{},{}] };
+  gearState[itemId].mods = [{},{},{},{},{}];
+  syncGearDOM();
+  recalc();
+}
+
+function syncGearDOM() {
+  Object.entries(hero.gear).forEach(([slotType, slotDef]) => {
+    const wrap = el("gear-wrap-" + slotType);
+    if (wrap) renderGearSlot(slotType, slotDef, wrap);
+  });
+  // Update contribution summaries
+  Object.values(hero.gear).forEach(slotDef => {
+    slotDef.items.forEach(item => updateGearContrib(item.id));
   });
 }
 
@@ -1139,15 +1392,27 @@ function buildBaseDamageDOM() {
 }
 
 // ============================================================
+// STATS MODE TOGGLE
+// ============================================================
+function setGearMode(on) {
+  gearDrivenMode = on;
+  el("mode-gear-btn").classList.toggle("active", on);
+  el("mode-manual-btn").classList.toggle("active", !on);
+  el("mode-hint").textContent = on ? "Gear panel feeds stats" : "Type stats directly";
+  recalc();
+}
+
+// ============================================================
 // CONDITION TOGGLES DOM
 // ============================================================
 function buildCondTogglesDOM() {
   const wrap = el("condition-toggles");
   wrap.innerHTML = "";
   const conds = [
-    { id: "boss",   label: "vs Boss" },
-    { id: "melee",  label: "Target <5m" },
-    { id: "fullhp", label: "Target Full/High HP" },
+    { id:"boss",   label:"vs Boss" },
+    { id:"melee",  label:"Target <5m" },
+    { id:"fullhp", label:"Target Full/High HP" },
+    { id:"bff",    label:"Big Fish Frenzy (10+ swallowed)" },
   ];
   conds.forEach(c => {
     const lbl = document.createElement("label");
@@ -1164,7 +1429,7 @@ function buildCondTogglesDOM() {
 }
 
 function syncCondDOM() {
-  ["boss","melee","fullhp"].forEach(c => {
+  ["boss","melee","fullhp","bff"].forEach(c => {
     const inp = el("cond_" + c);
     if (inp) inp.checked = condState[c];
     const lbl = el("cond_toggle_" + c);
@@ -1214,116 +1479,168 @@ function buildAbilityTabs() {
 }
 
 // ============================================================
-// RESOLVE STATS FROM TALENT + GEAR + REALM + DOM
+// RESOLVE STATS
+// gearDrivenMode=true  → talent + gear mods + realm feed stats; DOM agg fields show derived (readonly)
+// gearDrivenMode=false → DOM aggregate fields are the source (manual, same as original)
 // ============================================================
 function resolveStats() {
   const stats = {
-    totalDmgPct: 0,
-    bossDmgPct: 0,
-    meleeDmgPct: 0,
-    fullHpDmgPct: 0,
-    critRate: 0,
-    critDmg: 0,
-    precRate: 0,
-    precDmg: 0,
-    primaryWpnExtraDmg: 0,
-    abilityExtraDmg: 0,
-    vulnPct: 0,
-    totalOutput: 0,
-    toBase: 278,
-    toWeapon: 0,
-    toAmulet: 0,
-    toExclusive: 0,
-    extMult1: 1, extMult2: 1, extMult3: 1, extMult4: 1,
-    lvl21: "none",
-    // derived
-    activeCond: 0,
-    condBoss: false, condMelee: false, condFullHp: false,
+    totalDmgPct:0, bossDmgPct:0, meleeDmgPct:0, fullHpDmgPct:0,
+    critRate:0, critDmg:0, precRate:0, precDmg:0,
+    primaryWpnExtraDmg:0, abilityExtraDmg:0, vulnPct:0,
+    totalOutput:0, toBase:0, toWeapon:0, toAmulet:0, toExclusive:0,
+    extMult1:1, extMult2:1, extMult3:1, extMult4:1, lvl21:"none",
+    activeCond:0, condBoss:false, condMelee:false, condFullHp:false,
+    abilityBonus: {
+      ram:{pct:0,flat:0}, splish:{pct:0,flat:0}, aquaburst:{pct:0,flat:0},
+      ult:{pct:0,flat:0}, sprint:{pct:0,flat:0}, bubble:{pct:0,flat:0},
+    },
   };
-
-  // From DOM: offensive stats
-  hero.offensiveStats.forEach(s => {
-    const v = parseFloat(el("stat_" + s.id)?.value) || 0;
-    if (s.bucket === "totalDmg") stats.totalDmgPct += v;
-    else if (s.bucket === "conditional") {
-      if (s.condition === "boss")   stats.bossDmgPct  += v;
-      if (s.condition === "melee")  stats.meleeDmgPct += v;
-      if (s.condition === "fullhp") stats.fullHpDmgPct+= v;
-    }
-  });
-
-  // From DOM: crit/prec
-  stats.critRate = parseFloat(el("cr")?.value) || 0;
-  stats.critDmg  = parseFloat(el("cd")?.value) || 0;
-  stats.precRate = parseFloat(el("pr")?.value) || 0;
-  stats.precDmg  = parseFloat(el("pd")?.value) || 0;
-
-  // From DOM: vuln, extra
-  stats.vulnPct           = parseFloat(el("vuln")?.value) || 0;
-  stats.primaryWpnExtraDmg = parseFloat(el("pwed")?.value) || 0;
-  stats.abilityExtraDmg   = parseFloat(el("aed")?.value) || 0;
-
-  // From DOM: total output
-  stats.toBase      = parseFloat(el("to-base")?.value) || 278;
-  stats.toWeapon    = parseFloat(el("to-weapon")?.value) || 0;
-  stats.toAmulet    = parseFloat(el("to-amulet")?.value) || 0;
-  stats.toExclusive = parseFloat(el("to-exclusive")?.value) || 0;
-
-  // External mults
-  hero.externalMults.forEach(m => {
-    stats[m.id] = parseFloat(el(m.id)?.value) || 1;
-  });
-  stats.extMult1 = stats.ext1 || 1;
-  stats.extMult2 = stats.ext2 || 1;
-  stats.extMult3 = stats.ext3 || 1;
-  stats.extMult4 = stats.ext4 || 1;
 
   // Level-21
   const lvl21inp = document.querySelector('input[name="lvl21"]:checked');
   stats.lvl21 = lvl21inp ? lvl21inp.value : "none";
 
-  // Talent contributions
+  // External mults (always from DOM)
+  hero.externalMults.forEach(m => {
+    stats[m.id] = parseFloat(el(m.id)?.value) || 1;
+  });
+  stats.extMult1 = stats.ext1||1; stats.extMult2 = stats.ext2||1;
+  stats.extMult3 = stats.ext3||1; stats.extMult4 = stats.ext4||1;
+
+  // Talent contributions (always)
   hero.talent.forEach(lvl => {
     if (lvl.type === "exclusive") {
       const sel = talentState[`l${lvl.level}_sel`];
       if (sel) {
         const ex = lvl.exclusives.find(e => e.id === sel);
-        if (ex && ex.statKey && !ex.multiplicative) {
-          stats[ex.statKey] = (stats[ex.statKey] || 0) + ex.value;
-        }
+        if (ex && ex.statKey && !ex.multiplicative)
+          stats[ex.statKey] = (stats[ex.statKey]||0) + ex.value;
       }
     } else {
       lvl.lines.forEach(ln => {
-        const tiers = talentState[ln.id] || 0;
-        if (!ln.statKey || tiers === 0) return;
-        if (ln.pctPerTier)  stats[ln.statKey] = (stats[ln.statKey]  || 0) + ln.pctPerTier  * tiers;
-        if (ln.flatPerTier) stats[ln.statKey] = (stats[ln.statKey]  || 0) + ln.flatPerTier * tiers;
+        const tiers = talentState[ln.id]||0;
+        if (!ln.statKey || !tiers) return;
+        if (ln.pctPerTier)  stats[ln.statKey] = (stats[ln.statKey]||0) + ln.pctPerTier  * tiers;
+        if (ln.flatPerTier) stats[ln.statKey] = (stats[ln.statKey]||0) + ln.flatPerTier * tiers;
       });
     }
   });
 
-  // Accumulate talent output into totalDmgPct (output handled separately)
-  // Talent output amplification accumulates into a base output offset
-  const talentOutputPct = (stats.talentOutputPct || 0) + (stats.talentOutputPct2 || 0);
-  // NOTE: talent output adds to base_output before sqrt sub-formula?
-  // Interpret as: talent output boost adds to base_output (same bucket as arcana+realm), not a separate multiplier.
-  stats.toBase = stats.toBase + talentOutputPct;
-
-  // Realm contributions
-  hero.realm.forEach(row => {
-    const t = realmState[row.id] || 0;
-    if (row.statKey === "realmOutputPct" && t > 0) {
-      stats.toBase = stats.toBase + row.pctPerTier * t;
-    }
+  // Route talent stats to ability bonus pools
+  const abm = hero.abilityBonusMap;
+  Object.entries(abm).forEach(([abId, map]) => {
+    (map.pctTalent||[]).forEach(k => { stats.abilityBonus[abId].pct  += (stats[k]||0); });
+    (map.flatTalent||[]).forEach(k => { stats.abilityBonus[abId].flat += (stats[k]||0); });
   });
 
-  // Compute total output
+  // Talent output amplification into toBase
+  // toBase = arcana-only (user-entered) + talent Output Amplification (auto) + realm output boost (auto)
+  stats.toBase = (parseFloat(el("to-base")?.value)||0) + (stats.talentOutputPct||0) + (stats.talentOutputPct2||0);
+
+  // Realm
+  hero.realm.forEach(row => {
+    const t = realmState[row.id]||0;
+    if (!t) return;
+    if (row.statKey === "realmOutputPct") stats.toBase += row.pctPerTier * t;
+  });
+
+  // Talent critDmg (l5) and precDmg (l17) — accumulate to base stats
+  stats.critDmg += (stats.critDmgTalent||0);
+  stats.precDmg += (stats.precDmgTalent||0);
+
+  // Talent totalDmg (l1) → totalDmgPct
+  stats.totalDmgPct += (stats.totalDmg||0);
+
+  if (gearDrivenMode) {
+    // Gear-driven: accumulate from equipped gear items
+    Object.entries(hero.gear).forEach(([slotType, slotDef]) => {
+      const itemId = equippedGear[slotType];
+      if (!itemId) return;
+      const itemDef = slotDef.items.find(i => i.id === itemId);
+      const gs = gearState[itemId];
+      if (!itemDef || !gs) return;
+      const gType = slotDef.gearType;
+
+      // Fixed base stats
+      if (itemDef.baseStatKey === "accCr") stats.critRate += gs.base;
+
+      // Modifier rows
+      gs.mods.forEach(m => {
+        if (!m.statId || !m.val) return;
+        const def = STAT_POOL[m.statId];
+        const enh = JEFF_ENHANCEMENTS[m.statId];
+
+        if (def) {
+          if (def.bucket === "totalDmg")    stats.totalDmgPct += m.val;
+          else if (def.bucket === "conditional") {
+            if (def.condition === "boss")   stats.bossDmgPct   += m.val;
+            if (def.condition === "melee")  stats.meleeDmgPct  += m.val;
+            if (def.condition === "fullhp") stats.fullHpDmgPct += m.val;
+          }
+          else if (def.bucket === "totalOutput") {
+            if (gType === "weapon")    stats.toWeapon    += m.val;
+            else if (gType === "accessory") stats.toAmulet    += m.val;
+            else if (gType === "exclusive") stats.toExclusive += m.val;
+          }
+          else if (def.statKey === "critRate")  stats.critRate  += m.val;
+          else if (def.statKey === "critDmg")   stats.critDmg   += m.val;
+          else if (def.statKey === "precRate")  stats.precRate  += m.val;
+          else if (def.statKey === "precDmg")   stats.precDmg   += m.val;
+        }
+        if (enh) {
+          if (enh.type === "abilityPct"  && enh.abilityId) stats.abilityBonus[enh.abilityId].pct  += m.val;
+          if (enh.type === "abilityFlat" && enh.abilityId) stats.abilityBonus[enh.abilityId].flat += m.val;
+        }
+      });
+    });
+
+    // Update readonly display fields
+    ['cr','cd','pr','pd'].forEach(id => {
+      const inp = el(id);
+      if (inp) { inp.value = ({cr:stats.critRate,cd:stats.critDmg,pr:stats.precRate,pd:stats.precDmg})[id].toFixed(id==='cr'||id==='pr'?1:0); inp.readOnly = true; inp.style.opacity="0.7"; }
+    });
+    ['to-weapon','to-amulet','to-exclusive'].forEach(id => {
+      const inp = el(id); const v = {["to-weapon"]:stats.toWeapon,["to-amulet"]:stats.toAmulet,["to-exclusive"]:stats.toExclusive}[id];
+      if (inp) { inp.value = v.toFixed(0); inp.readOnly = true; inp.style.opacity="0.7"; }
+    });
+    // Offensive stats readonly
+    hero.offensiveStats.forEach(s => {
+      const inp = el("stat_"+s.id); if (!inp) return;
+      const v = s.condition==="boss" ? stats.bossDmgPct : s.condition==="melee" ? stats.meleeDmgPct : s.condition==="fullhp" ? stats.fullHpDmgPct : stats.totalDmgPct;
+      inp.value = v.toFixed(1); inp.readOnly = true; inp.style.opacity="0.7";
+    });
+    ['vuln','pwed','aed'].forEach(id => { const inp = el(id); if(inp){inp.readOnly=true;inp.style.opacity="0.7";} });
+  } else {
+    // Manual mode: read from DOM fields
+    hero.offensiveStats.forEach(s => {
+      const v = parseFloat(el("stat_"+s.id)?.value)||0;
+      if (s.bucket === "totalDmg") stats.totalDmgPct += v;
+      else if (s.condition === "boss")   stats.bossDmgPct   += v;
+      else if (s.condition === "melee")  stats.meleeDmgPct  += v;
+      else if (s.condition === "fullhp") stats.fullHpDmgPct += v;
+    });
+    stats.critRate += parseFloat(el("cr")?.value)||0;
+    stats.critDmg  += parseFloat(el("cd")?.value)||0;
+    stats.precRate += parseFloat(el("pr")?.value)||0;
+    stats.precDmg  += parseFloat(el("pd")?.value)||0;
+    stats.vulnPct           = parseFloat(el("vuln")?.value)||0;
+    stats.primaryWpnExtraDmg = parseFloat(el("pwed")?.value)||0;
+    stats.abilityExtraDmg   = parseFloat(el("aed")?.value)||0;
+    stats.toWeapon    = parseFloat(el("to-weapon")?.value)||0;
+    stats.toAmulet    = parseFloat(el("to-amulet")?.value)||0;
+    stats.toExclusive = parseFloat(el("to-exclusive")?.value)||0;
+    // unlock fields
+    ['cr','cd','pr','pd','to-weapon','to-amulet','to-exclusive','vuln','pwed','aed'].forEach(id => {
+      const inp = el(id); if(inp){inp.readOnly=false;inp.style.opacity="";} });
+    hero.offensiveStats.forEach(s => { const inp=el("stat_"+s.id); if(inp){inp.readOnly=false;inp.style.opacity="";} });
+  }
+
   stats.totalOutput = computeTotalOutput(stats.toBase, stats.toWeapon, stats.toAmulet, stats.toExclusive);
 
-  // Talent level 1 feeds statKey "totalDmg"; add to the totalDmgPct bucket
-  stats.totalDmgPct += (stats.totalDmg || 0);
+  // Vulnerability (always from DOM in manual, always 0 in gear-driven unless future stat)
+  if (!gearDrivenMode) stats.vulnPct = parseFloat(el("vuln")?.value)||0;
 
-  // Conditions
   stats.condBoss   = condState.boss;
   stats.condMelee  = condState.melee;
   stats.condFullHp = condState.fullhp;
@@ -1332,66 +1649,32 @@ function resolveStats() {
   if (condState.melee)  stats.activeCond += stats.meleeDmgPct;
   if (condState.fullhp) stats.activeCond += stats.fullHpDmgPct;
 
-  // Gear: add weapon flat bonus to ability base damage (handled per-ability in recalc)
-  // Gear: add CR/CD/PR/PD etc. from modifier labels (basic label matching)
-  Object.values(hero.gear).forEach(slots => {
-    slots.forEach(slot => {
-      const gs = gearState[slot.id];
-      if (!gs) return;
-      // Base stat
-      if (slot.baseStatKey === "accCr") stats.critRate += gs.base;
-      if (slot.subBaseKey  === "accBlock") {} // defensive, skip
-
-      // Modifier rows — simple label matching
-      for (let i = 0; i < 5; i++) {
-        const lbl = (gs.modStats[i] || "").toLowerCase().trim();
-        const val = gs.mods[i] || 0;
-        if (!val) continue;
-        if (lbl.includes("total dmg") || lbl.includes("total damage"))  stats.totalDmgPct += val;
-        else if (lbl.includes("crit rate") || lbl === "cr")             stats.critRate     += val;
-        else if (lbl.includes("crit dmg")  || lbl === "cd")             stats.critDmg      += val;
-        else if (lbl.includes("prec rate") || lbl === "pr")             stats.precRate     += val;
-        else if (lbl.includes("prec dmg")  || lbl === "pd")             stats.precDmg      += val;
-        else if (lbl.includes("total output") || lbl === "to")         stats.toWeapon     += val; // approximate: treated as weapon slot
-        else if (lbl.includes("boss"))                                  stats.bossDmgPct   += val;
-        else if (lbl.includes("melee"))                                 stats.meleeDmgPct  += val;
-        else if (lbl.includes("full hp") || lbl.includes("fullhp"))    stats.fullHpDmgPct += val;
-        else if (lbl.includes("primary wpn") || lbl.includes("primary weapon")) stats.primaryWpnExtraDmg += val;
-        else if (lbl.includes("ability extra"))                         stats.abilityExtraDmg += val;
-        else if (lbl.includes("vuln"))                                  stats.vulnPct      += val;
-      }
-    });
-  });
-
-  // Recompute output after gear TO mods
-  stats.totalOutput = computeTotalOutput(stats.toBase, stats.toWeapon, stats.toAmulet, stats.toExclusive);
-
-  // Recompute active cond (in case gear added to boss/melee/fullhp)
-  stats.activeCond = 0;
-  if (condState.boss)   stats.activeCond += stats.bossDmgPct;
-  if (condState.melee)  stats.activeCond += stats.meleeDmgPct;
-  if (condState.fullhp) stats.activeCond += stats.fullHpDmgPct;
-
   return stats;
 }
 
+// Returns { flatBonus, abilityPct } for the given ability from talent+gear
+function resolveAbilityBonuses(abilityId, stats) {
+  const ab = stats.abilityBonus[abilityId] || { pct:0, flat:0 };
+  return { flatBonus: ab.flat, abilityPct: ab.pct };
+}
+
 function resolveAbilityBase(ability, stats) {
-  let base = parseFloat(el("base_" + ability.id)?.value) || 0;
+  let base = parseFloat(el("base_"+ability.id)?.value)||0;
+  const weaponId = equippedGear.weapon;
+  const weaponDef = weaponId ? hero.gear.weapon.items.find(i=>i.id===weaponId) : null;
+  const wgs = weaponId ? gearState[weaponId] : null;
 
-  // Add weapon flat bonus
-  if (ability.id === "ram" || ability.id === "sprint") {
-    const ws = gearState["deep_sea_propellor"];
-    if (ws) base += ws.base;
-  }
-  if (ability.id === "splish") {
-    const ks = gearState["kraken_blaster"];
-    if (ks) base += ks.base;
+  // Add weapon flat bonus for the equipped weapon
+  if (weaponDef && wgs) {
+    if (weaponDef.baseStatKey === "weaponFlatRam"    && (ability.id==="ram"||ability.id==="sprint")) base += wgs.base;
+    if (weaponDef.baseStatKey === "weaponFlatSplish" && ability.id==="splish") base += wgs.base;
   }
 
-  // Special gear: West Coast Bionic Fin
+  // WCBF: adds measured_base * (10390/100) to ram base
+  // VERIFY: WCBF applies to measured_base only (before weapon flat), not to (measured_base + weapon_flat)
   if (ability.id === "ram" && hero.specialGear.wcbf.enabled) {
-    const ramBase = parseFloat(el("base_ram")?.value) || 0;
-    base += hero.specialGear.wcbf.compute(ramBase);
+    const measured = parseFloat(el("base_ram")?.value)||0;
+    base += hero.specialGear.wcbf.compute(measured);
   }
 
   return base;
@@ -1403,58 +1686,63 @@ function resolveAbilityBase(ability, stats) {
 function recalc() {
   const stats = resolveStats();
 
-  // Update TO display
-  const toDisplay = computeTotalOutput(
-    parseFloat(el("to-base")?.value)||278,
-    parseFloat(el("to-weapon")?.value)||0,
-    parseFloat(el("to-amulet")?.value)||0,
-    parseFloat(el("to-exclusive")?.value)||0
-  );
-  el("to-computed").textContent = toDisplay.toFixed(2);
+  el("to-computed").textContent = stats.totalOutput.toFixed(2);
 
-  // Crit+prec warning
-  const crv = parseFloat(el("cr")?.value)||0;
-  const prv = parseFloat(el("pr")?.value)||0;
+  const crv = stats.critRate, prv = stats.precRate;
   el("crit-warn").style.display = (crv + prv > 100) ? "block" : "none";
 
-  // Active ability
+  // All-abilities summary table
+  const summaryTbody = el("ability-summary-tbody");
+  if (summaryTbody) {
+    summaryTbody.innerHTML = "";
+    hero.abilities.forEach(ab => {
+      const base = resolveAbilityBase(ab, stats);
+      const { flatBonus, abilityPct } = resolveAbilityBonuses(ab.id, stats);
+      const r = computeDamage(stats, base, ab.dmgType, flatBonus, abilityPct);
+      const tr = document.createElement("tr");
+      if (ab.id === activeAbility) tr.className = "sel";
+      tr.innerHTML = `<td style="cursor:pointer" onclick="setActiveAbility('${ab.id}')">${ab.label}</td><td>${fmt(r.avgHit)}</td><td style="color:var(--muted)">${fmt(r.rawHit)}</td>`;
+      summaryTbody.appendChild(tr);
+
+      // Mouthwash DoT row
+      if (ab.id === "splish" && hero.specialGear.mouthwash.enabled) {
+        const dot = computeDamage(stats, base * (hero.specialGear.mouthwash.dotPct/100), ab.dmgType, 0, abilityPct);
+        const tr2 = document.createElement("tr");
+        tr2.style.color = "var(--yellow)";
+        // VERIFY: DoT inherits full stack or base only — implemented as full stack
+        tr2.innerHTML = `<td style="padding-left:12px;font-size:10px">↳ Mouthwash DoT</td><td>${fmt(dot.avgHit)}</td><td style="color:var(--muted)">${fmt(dot.rawHit)}</td>`;
+        summaryTbody.appendChild(tr2);
+      }
+    });
+  }
+
+  // Active ability detail breakdown
   const ab = hero.abilities.find(a => a.id === activeAbility);
   const baseDmg = resolveAbilityBase(ab, stats);
-  const result = computeDamage(stats, baseDmg, ab.dmgType);
+  const { flatBonus, abilityPct } = resolveAbilityBonuses(ab.id, stats);
+  const result = computeDamage(stats, baseDmg, ab.dmgType, flatBonus, abilityPct);
 
-  // Results panel
   el("result-avg").textContent = fmt(result.avgHit);
   el("result-raw").textContent = "raw: " + fmt(result.rawHit);
-
-  // Boss note
   el("boss-note").style.display = condState.boss ? "block" : "none";
 
-  // Breakdown table
   const tbody = el("breakdown-tbody");
   tbody.innerHTML = "";
   result.breakdown.forEach(row => {
     const tr = document.createElement("tr");
     if (row.highlight) tr.className = "highlight";
-    const multStr = row.mult ? `×${row.mult}` : "";
-    tr.innerHTML = `<td style="${row.dim ? 'color:var(--muted)' : ''}">${row.label}</td><td style="${row.dim ? 'color:var(--muted)' : ''}">${row.value}</td><td>${multStr}</td>`;
+    tr.innerHTML = `<td style="${row.dim?'color:var(--muted)':''}">${row.label}</td><td style="${row.dim?'color:var(--muted)':''}">${row.value}</td><td>${row.mult?`×${row.mult}`:""}</td>`;
     tbody.appendChild(tr);
   });
 
-  // Mouthwash DoT note
-  if (activeAbility === "splish" && hero.specialGear.mouthwash.enabled) {
-    const dotBase = baseDmg * (hero.specialGear.mouthwash.dotPct / 100);
-    const tr = document.createElement("tr");
-    tr.style.color = "var(--yellow)";
-    tr.innerHTML = `<td colspan="2">Mouthwash DoT (separate, +3000% of Splish base)</td><td>${fmt(dotBase * (1 + stats.totalDmgPct/100 + stats.activeCond/100))}</td>`;
-    // NOTE: verify whether DoT inherits the full multiplier stack or just base
-    tbody.appendChild(tr);
-  }
-
-  // Points counter
   updatePointsCounter();
+  updateOptimizer(stats, ab, baseDmg, flatBonus, abilityPct);
+}
 
-  // Optimizer
-  updateOptimizer(stats, baseDmg, ab.dmgType);
+function setActiveAbility(id) {
+  activeAbility = id;
+  hero.abilities.forEach(a => { const t=el("abtab_"+a.id); if(t) t.classList.toggle("active", a.id===id); });
+  recalc();
 }
 
 // ============================================================
@@ -1479,35 +1767,33 @@ function updatePointsCounter() {
 // ============================================================
 // OPTIMIZER UPDATE
 // ============================================================
-function updateOptimizer(stats, baseDmg, dmgType) {
-  const results = computeOptimizer(stats, baseDmg, dmgType);
+function updateOptimizer(stats, ab, baseDmg, flatBonus, abilityPct) {
+  const results = computeOptimizer(stats, baseDmg, ab.dmgType, flatBonus, abilityPct);
   const wrap = el("optimizer-output");
   if (!results.length || !baseDmg) {
     wrap.innerHTML = "<div style='color:var(--muted);font-size:12px'>Enter base damage to see rankings.</div>";
     return;
   }
-  const maxGain = results[0].gain;
-  let html = "<div style='margin-bottom:4px;font-size:11px;color:var(--muted)'>Gain % per +1 unit at current build state (higher = better next stat to add)</div>";
-  results.forEach((r, i) => {
-    const barW = maxGain > 0 ? (r.gain / maxGain * 100).toFixed(1) : 0;
+  const maxS = Math.max(...results.map(r=>r.perS));
+  const coeff = getTalentCoeff(stats, "critDmg");
+  const precCoeff = getTalentCoeff(stats, "precDmg");
+  let html = `<div style='margin-bottom:4px;font-size:11px;color:var(--muted)'>
+    Gain % per S-tier roll at current build (ability: <b style="color:var(--accent)">${ab.label}</b>)<br>
+    CD coeff=${coeff.toFixed(1)} PR coeff=${precCoeff.toFixed(1)} — affix×coeff = actual displayed-stat increase (VERIFY in-game)</div>`;
+  results.forEach((r,i) => {
+    const barW = maxS>0 ? (r.perS/maxS*100).toFixed(1) : 0;
+    const pu = r.perUnit!=null ? ` <span style="color:var(--muted);font-size:10px">(+${r.perUnit.toFixed(4)}%/unit)</span>` : "";
     html += `<div class="rank-item">
       <div class="rank-num">${i+1}</div>
-      <div class="rank-stat">${r.stat}</div>
+      <div class="rank-stat" style="font-size:11px">${r.stat}${pu}</div>
       <div class="rank-bar-wrap"><div class="rank-bar" style="width:${barW}%"></div></div>
-      <div class="rank-pct">+${fmtPct(r.gain)}</div>
+      <div class="rank-pct">+${fmtPct(r.perS)}</div>
     </div>`;
   });
 
-  // CR/CD and PR/PD balance hints
-  const cr = stats.critRate, cd = stats.critDmg, pr = stats.precRate, pd = stats.precDmg;
-  if (cr > 0 && cd > 0) {
-    const cdPerCr = cd / cr;
-    html += `<div class="info-box" style="margin-top:6px;">Crit ratio: CD/CR = ${cdPerCr.toFixed(0)} (source baseline ≈ 80). ${cdPerCr > 80 ? "More CR relatively better" : "More CD relatively better"} at this build.</div>`;
-  }
-  if (pr > 0 && pd > 0) {
-    const pdPerPr = pd / pr;
-    html += `<div class="info-box" style="margin-top:4px;">Prec ratio: PD/PR = ${pdPerPr.toFixed(0)} (source baseline ≈ 633). ${pdPerPr > 633 ? "More PR relatively better" : "More PD relatively better"} at this build.</div>`;
-  }
+  const cr=stats.critRate, cd=stats.critDmg, pr=stats.precRate, pd=stats.precDmg;
+  if (cr>0&&cd>0) { const ratio=cd/cr; html+=`<div class="info-box" style="margin-top:6px">CD/CR=${ratio.toFixed(0)} (baseline≈80) → ${ratio>80?"more CR":"more CD"} better now.</div>`; }
+  if (pr>0&&pd>0) { const ratio=pd/pr; html+=`<div class="info-box" style="margin-top:4px">PD/PR=${ratio.toFixed(0)} (baseline≈633) → ${ratio>633?"more PR":"more PD"} better now.</div>`; }
 
   wrap.innerHTML = html;
 }
@@ -1532,6 +1818,132 @@ function buildPriorityRef() {
     div.innerHTML = `<span style="color:var(--accent)">${slot}:</span> ${items.join(" › ")}`;
     prefs.appendChild(div);
   });
+}
+
+// ============================================================
+// BASE DAMAGE ESTIMATOR
+// Reverse-calculates the Base Damage field value from an observed in-game hit.
+// Requires all other stats to already be set (gear-driven or manual).
+// ============================================================
+function buildEstimatorDOM() {
+  const sel = el("est-ability");
+  if (!sel) return;
+  sel.innerHTML = hero.abilities.map(ab => `<option value="${ab.id}">${ab.label}</option>`).join("");
+  sel.addEventListener("change", updateEstimator);
+  el("est-hittype").addEventListener("change", updateEstimator);
+  el("est-observed").addEventListener("input", updateEstimator);
+}
+
+function updateEstimator() {
+  const resultDiv = el("est-result");
+  if (!resultDiv) return;
+
+  const abilityId = el("est-ability")?.value;
+  const hitType   = el("est-hittype")?.value || "normal";
+  const observed  = parseFloat(el("est-observed")?.value);
+
+  if (!abilityId || !observed || observed <= 0) {
+    resultDiv.innerHTML = "<div style='color:var(--muted);font-size:12px'>Enter an observed damage number above to estimate.</div>";
+    return;
+  }
+
+  const ability = hero.abilities.find(a => a.id === abilityId);
+  if (!ability) return;
+
+  const stats = resolveStats();
+  const { flatBonus, abilityPct } = resolveAbilityBonuses(abilityId, stats);
+
+  // Run computeDamage with base=1 and no flat bonus to extract the pure multiplier product
+  // rawHit from this call = fa × f1 × f2 × f3 × f4 × f5
+  const probe     = computeDamage(stats, 1, ability.dmgType, 0, abilityPct);
+  const factors   = probe.rawHit;   // product of all pre-crit multipliers
+  const adjCd     = probe.cd;       // lvl21-adjusted CD
+  const adjPd     = probe.pd;       // lvl21-adjusted PD
+  const extMult   = probe.extMult;
+
+  if (factors === 0 || extMult === 0) {
+    resultDiv.innerHTML = `<div class="warn-box">One or more multipliers resolved to 0 — check that Total Output and stats are set.</div>`;
+    return;
+  }
+
+  // Reverse from observed → rawHit (undo hit-type multiplier and extMult)
+  let rawHit, hitLabel;
+  if (hitType === "normal") {
+    rawHit   = observed / extMult;
+    hitLabel = "normal hit";
+  } else if (hitType === "crit") {
+    if (adjCd <= 0) { resultDiv.innerHTML = `<div class="warn-box">CD is 0 — cannot reverse a crit hit.</div>`; return; }
+    rawHit   = observed / ((adjCd / 100) * extMult);
+    hitLabel = `crit (CD=${adjCd.toFixed(0)}%)`;
+  } else {
+    if (adjPd <= 0) { resultDiv.innerHTML = `<div class="warn-box">PD is 0 — cannot reverse a prec hit.</div>`; return; }
+    rawHit   = observed / ((adjPd / 100) * extMult);
+    hitLabel = `prec (PD=${adjPd.toFixed(0)}%)`;
+  }
+
+  // rawHit = (baseDmg + flatBonus) × factors
+  // → baseDmg = rawHit / factors − flatBonus
+  const baseDmg = rawHit / factors - flatBonus;
+
+  // Determine the weapon flat bonus that resolveAbilityBase adds automatically
+  const weaponId  = equippedGear.weapon;
+  const weaponDef = weaponId ? hero.gear.weapon.items.find(i => i.id === weaponId) : null;
+  const wgs       = weaponId ? gearState[weaponId] : null;
+  let weaponFlat  = 0;
+  if (weaponDef && wgs) {
+    if (weaponDef.baseStatKey === "weaponFlatRam"    && (abilityId === "ram" || abilityId === "sprint")) weaponFlat = wgs.base;
+    if (weaponDef.baseStatKey === "weaponFlatSplish" && abilityId === "splish")                          weaponFlat = wgs.base;
+  }
+
+  // Solve for the value the user should type into the Base Damage field (field_value).
+  // resolveAbilityBase computes:
+  //   ram without WCBF : baseDmg = field_value + weaponFlat
+  //   ram with WCBF    : baseDmg = field_value × (1 + 10390/100) + weaponFlat  → VERIFY application order
+  //   all others       : baseDmg = field_value + weaponFlat  (if weapon applies)
+  let fieldValue, wcbfNote = "";
+  if (abilityId === "ram" && hero.specialGear.wcbf.enabled) {
+    fieldValue = (baseDmg - weaponFlat) / (1 + 10390 / 100);
+    wcbfNote   = ` WCBF active — divided effective base by 104.9 (VERIFY application order).`;
+  } else {
+    fieldValue = baseDmg - weaponFlat;
+  }
+
+  if (!isFinite(fieldValue) || fieldValue < 0) {
+    resultDiv.innerHTML = `<div class="warn-box">Result is ${!isFinite(fieldValue) ? "invalid" : "negative"}.
+      Check: correct hit type selected? All conditions that were active during the hit are toggled on?
+      Flat ability bonuses (talent/gear) included in build?</div>`;
+    return;
+  }
+
+  const rounded = Math.round(fieldValue);
+  resultDiv.innerHTML = `
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">
+        From <b style="color:var(--text)">${hitLabel}</b> of <b style="color:var(--text)">${fmt(observed)}</b> on ${ability.label}
+      </div>
+      <div style="font-size:24px;font-weight:700;color:var(--green);letter-spacing:1px;margin-bottom:4px">${fmt(rounded)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.6">
+        Weapon flat (${fmt(weaponFlat)}) and flat ability bonus (${fmt(Math.round(flatBonus))}) removed.${wcbfNote}<br>
+        Enter this value in <b style="color:var(--text)">Base Damage → ${ability.label}</b>.
+      </div>
+      <button class="btn" style="font-size:11px;padding:3px 12px"
+        onclick="applyEstimate('${abilityId}', ${rounded})">Apply to Base Damage field</button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.8;padding:0 2px">
+      Divisors: factors=${factors.toFixed(4)} × extMult=${extMult.toFixed(4)}
+      ${hitType !== "normal" ? `× hitType=${hitType === "crit" ? (adjCd/100).toFixed(4) : (adjPd/100).toFixed(4)}` : ""}
+      → rawBase=${fmt(Math.round(baseDmg))} − weaponFlat=${fmt(weaponFlat)} − flatBonus=${fmt(Math.round(flatBonus))}
+      = <b style="color:var(--green)">${fmt(rounded)}</b>
+    </div>`;
+}
+
+function applyEstimate(abilityId, value) {
+  const inp = el("base_" + abilityId);
+  if (!inp) return;
+  inp.value = value;
+  inp.dispatchEvent(new Event("input"));
+  // Scroll to base damage panel so user can see the applied value
+  inp.closest(".panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // ============================================================
@@ -1567,7 +1979,7 @@ function collectBuildSnapshot() {
   return {
     abilities,
     offStats,
-    toBase: parseFloat(el("to-base")?.value) || 278,
+    toBase: parseFloat(el("to-base")?.value) || 0,
     toWeapon: parseFloat(el("to-weapon")?.value) || 0,
     toAmulet: parseFloat(el("to-amulet")?.value) || 0,
     toExclusive: parseFloat(el("to-exclusive")?.value) || 0,
@@ -1582,9 +1994,11 @@ function collectBuildSnapshot() {
     extMults: hero.externalMults.map(m => parseFloat(el(m.id)?.value) || 1),
     talentState: Object.assign({}, talentState),
     gearState: JSON.parse(JSON.stringify(gearState)),
+    equippedGear: Object.assign({}, equippedGear),
     realmState: Object.assign({}, realmState),
     condState: Object.assign({}, condState),
     activeAbility,
+    gearDrivenMode,
     specialGear: { wcbf: hero.specialGear.wcbf.enabled, mouthwash: hero.specialGear.mouthwash.enabled },
   };
 }
@@ -1620,10 +2034,12 @@ function applySnapshot(snap) {
   if (snap.pwed !== undefined) el("pwed").value = snap.pwed;
   if (snap.aed  !== undefined) el("aed").value  = snap.aed;
   if (snap.extMults) hero.externalMults.forEach((m,i) => { const inp = el(m.id); if(inp && snap.extMults[i] !== undefined) inp.value = snap.extMults[i]; });
-  if (snap.talentState) { talentState = Object.assign(defaultTalentState(), snap.talentState); syncTalentDOM(); }
-  if (snap.gearState)   { gearState   = Object.assign(defaultGearState(),   snap.gearState);   syncGearDOM(); }
-  if (snap.realmState)  { realmState  = Object.assign(defaultRealmState(),  snap.realmState);  syncRealmDOM(); }
-  if (snap.condState)   { condState   = snap.condState; syncCondDOM(); }
+  if (snap.talentState)  { talentState  = Object.assign(defaultTalentState(),  snap.talentState);  syncTalentDOM(); }
+  if (snap.gearState)    { gearState    = Object.assign(defaultGearState(),    snap.gearState);    syncGearDOM(); }
+  if (snap.equippedGear) { equippedGear = Object.assign(defaultEquippedGear(), snap.equippedGear); syncGearDOM(); }
+  if (snap.realmState)   { realmState   = Object.assign(defaultRealmState(),   snap.realmState);   syncRealmDOM(); }
+  if (snap.condState)    { condState    = snap.condState; syncCondDOM(); }
+  if (snap.gearDrivenMode !== undefined) setGearMode(snap.gearDrivenMode);
   if (snap.activeAbility) { activeAbility = snap.activeAbility; hero.abilities.forEach(a => { const t = el("abtab_"+a.id); if(t) t.classList.toggle("active", a.id === activeAbility); }); }
   if (snap.specialGear) { hero.specialGear.wcbf.enabled = !!snap.specialGear.wcbf; hero.specialGear.mouthwash.enabled = !!snap.specialGear.mouthwash; }
   recalc();
@@ -1667,7 +2083,7 @@ function resolveStatsFromSnap(snap) {
     precRate: snap.pr || 0, precDmg: snap.pd || 0,
     primaryWpnExtraDmg: snap.pwed || 0, abilityExtraDmg: snap.aed || 0,
     vulnPct: snap.vuln || 0,
-    toBase: snap.toBase || 278, toWeapon: snap.toWeapon || 0,
+    toBase: snap.toBase || 0, toWeapon: snap.toWeapon || 0,
     toAmulet: snap.toAmulet || 0, toExclusive: snap.toExclusive || 0,
     extMult1: snap.extMults?.[0]||1, extMult2: snap.extMults?.[1]||1,
     extMult3: snap.extMults?.[2]||1, extMult4: snap.extMults?.[3]||1,
@@ -1693,9 +2109,10 @@ function resolveStatsFromSnap(snap) {
 // INIT
 // ============================================================
 document.addEventListener("DOMContentLoaded", () => {
-  talentState = defaultTalentState();
-  gearState   = defaultGearState();
-  realmState  = defaultRealmState();
+  talentState  = defaultTalentState();
+  gearState    = defaultGearState();
+  equippedGear = defaultEquippedGear();
+  realmState   = defaultRealmState();
 
   buildOffensiveStatsDOM();
   buildBaseDamageDOM();
@@ -1706,6 +2123,7 @@ document.addEventListener("DOMContentLoaded", () => {
   buildRealmDOM();
   buildAbilityTabs();
   buildPriorityRef();
+  buildEstimatorDOM();
   displaySelfTest();
 
   // Wire up all remaining DOM inputs
