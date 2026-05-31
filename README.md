@@ -2,7 +2,7 @@
 
 A local, offline damage calculator and build optimizer for the **Marvel Rivals PvE "Blood Hunt"** mode.
 
-> **Beta — v0.2.0** | Currently covers **Jeff the Land Shark** (Hide & Seek / swim build).
+> **Beta — v0.3.0** | Currently covers **Jeff the Land Shark** (Hide & Seek / swim build).
 
 ---
 
@@ -35,6 +35,7 @@ A local, offline damage calculator and build optimizer for the **Marvel Rivals P
 | **Reference** | Source priority order and per-slot preferred modifier guidance. |
 | **Save / Load / Compare** | Export build to JSON, import from JSON, load a second build for side-by-side comparison. |
 | **Base Damage Estimator** | Can't unequip items? Enter an observed in-game hit, select the ability and hit type (Normal / Crit / Prec), and the panel reverses the formula to produce the correct Base Damage value. Automatically removes weapon flat, ability flat bonuses, and the WCBF factor. "Apply" button fills in the Base Damage field directly. |
+| **Item Comparison** | Test two hypothetical items against your current equipped item without touching your main build. Select the slot type, define up to 5 modifiers per test item (same dropdown + grade badge system as the gear panel), and see a live per-ability table showing Current / Item A / Item B damage with Δ% and a Best column. Updates automatically when the main build changes. |
 | **Self-Test** | Runs three reference cases on load and shows PASS/FAIL with error %. All three must reproduce their expected values within 1 %. |
 
 ---
@@ -221,6 +222,38 @@ Talent lines and gear enhancements that affect a specific ability feed into that
 | --- | --- |
 | **Gear-driven** (default) | Talent tree + equipped gear modifier rows + realm feed all formula stats. CR/CD/PR/PD and the offensive stat fields update to show derived values and become read-only. Change stats by changing gear, talent, or realm. |
 | **Manual** | Type stats directly into the aggregate input fields. Gear modifier rows are shown with grade badges but do not add to the formula. Use this for quick "what if I had +500 CD?" testing. |
+
+---
+
+## Item Comparison
+
+The Item Comparison panel (right column, below Optimizer) lets you evaluate two hypothetical gear pieces against your current equipped item for the same slot without modifying your build.
+
+### Workflow
+
+1. Open the **Item Comparison** panel.
+2. Select the **slot** you want to test (Weapon / Armor / Accessory / Exclusive). The currently equipped item is shown for reference.
+3. Fill in **Item A** and **Item B**:
+   - Optional label (e.g. "S-tier weapon" vs "current A-tier weapon")
+   - Base stat (weapon flat damage or accessory base crit rate — the only base stats that affect the damage formula)
+   - Up to 5 modifier rows, each with a stat dropdown and value. The dropdown is filtered to that slot type's eligible pool. Grade badges appear automatically.
+   - **S-tier** button fills all 5 rows with the top eligible stats at their S-tier max values for instant best-case modelling.
+   - **Clear** resets all 5 rows and the base stat.
+4. The **results table** updates live and shows avg damage per ability for Current / Item A / Item B with a Δ% column and a colour-coded Best column.
+
+### How the swap works
+
+**Gear-driven mode (default):** The current equipped item's contributions (modifier stats and base stat where relevant) are subtracted from the live stats, then the test item's contributions are added. This is a true slot swap — the rest of your build is unchanged.
+
+**Manual mode:** The test item's contributions are added on top of your manually entered stats. A warning banner makes this distinction clear. Switch to Gear-driven for an accurate head-to-head.
+
+### What it accounts for
+
+- All modifier stats routed to their correct formula buckets (Total Damage, CR/CD/PR/PD, Total Output per-slot sqrt, conditional bonuses, Jeff ability-specific enhancements)
+- Weapon flat damage difference between test items (deltaA / deltaB applied per-ability)
+- Accessory base crit rate difference
+- All currently active conditions (Boss, Melee, Full-HP) are inherited from the main build toggles
+- Results update automatically whenever talent, gear, realm, or conditions change in the main build
 
 ---
 

@@ -215,7 +215,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 <!-- BASE DAMAGE -->
 <div class="panel">
   <h2>Base Damage (actual base + weapon flat)</h2>
-  <div class="info-box" style="margin-bottom:8px">Measure each value in the practice range with no gear equipped, then add the weapon gear flat bonus.</div>
+  <div class="info-box" style="margin-bottom:8px">Enter the raw hit measured in the practice range with <b>no gear equipped</b>. The weapon flat bonus is added automatically from the equipped weapon below. Can't unequip? Use the <b>Base Damage Estimator</b> panel.</div>
   <div id="base-damage-inputs"></div>
 </div>
 
@@ -382,6 +382,14 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
     <code>CD_new = (CD_current / coeff + affix) * coeff</code> (coeff ≈ 1.5 for crit build, 2.0 for prec build).
     Hook: implement <code>HERO_DATA.jeff.talentCdCoeff</code> and wire into optimizer.
   </div>
+</div>
+
+<!-- ITEM COMPARISON -->
+<div class="panel collapsible collapsed" id="compare-items-panel">
+  <div class="panel-head" onclick="togglePanel('compare-items-panel')">
+    <h2 style="margin:0">Item Comparison</h2>
+  </div>
+  <div class="panel-body" id="compare-items-body"></div>
 </div>
 
 <!-- TALENT TREE -->
@@ -955,6 +963,12 @@ let condState = { boss:false, melee:false, fullhp:false, bff:false };
 let activeAbility = hero.abilities[0].id;
 let gearDrivenMode = true;
 let buildB = null;
+const emptyMods = () => [{statId:null,val:0},{statId:null,val:0},{statId:null,val:0},{statId:null,val:0},{statId:null,val:0}];
+let compareState = {
+  slotType: "weapon",
+  itemA: { label:"Item A", base:0, mods: emptyMods() },
+  itemB: { label:"Item B", base:0, mods: emptyMods() },
+};
 
 // ============================================================
 // BUILD INIT / RESET
@@ -1737,6 +1751,7 @@ function recalc() {
 
   updatePointsCounter();
   updateOptimizer(stats, ab, baseDmg, flatBonus, abilityPct);
+  updateCompareResults();
 }
 
 function setActiveAbility(id) {
@@ -1796,6 +1811,339 @@ function updateOptimizer(stats, ab, baseDmg, flatBonus, abilityPct) {
   if (pr>0&&pd>0) { const ratio=pd/pr; html+=`<div class="info-box" style="margin-top:4px">PD/PR=${ratio.toFixed(0)} (baseline≈633) → ${ratio>633?"more PR":"more PD"} better now.</div>`; }
 
   wrap.innerHTML = html;
+}
+
+// ============================================================
+// ITEM COMPARISON — swaps one slot's item and recomputes all abilities
+// ============================================================
+
+// Extract stat deltas contributed by a single item's modifier rows.
+// Base stats (weapon flat, accCr) are handled separately in getCompareStats.
+function getItemContribs(gearType, gs) {
+  const d = {
+    totalDmgPct:0, bossDmgPct:0, meleeDmgPct:0, fullHpDmgPct:0,
+    critRate:0, critDmg:0, precRate:0, precDmg:0,
+    toWeapon:0, toAmulet:0, toExclusive:0,
+    ab: { ram:{pct:0,flat:0}, splish:{pct:0,flat:0}, aquaburst:{pct:0,flat:0},
+          ult:{pct:0,flat:0}, sprint:{pct:0,flat:0}, bubble:{pct:0,flat:0} },
+  };
+  (gs.mods||[]).forEach(m => {
+    if (!m.statId || !m.val) return;
+    const def = STAT_POOL[m.statId], enh = JEFF_ENHANCEMENTS[m.statId];
+    if (def) {
+      if      (def.bucket === "totalDmg")       d.totalDmgPct += m.val;
+      else if (def.bucket === "conditional") {
+        if (def.condition==="boss")   d.bossDmgPct   += m.val;
+        if (def.condition==="melee")  d.meleeDmgPct  += m.val;
+        if (def.condition==="fullhp") d.fullHpDmgPct += m.val;
+      } else if (def.bucket === "totalOutput") {
+        if      (gearType==="weapon")    d.toWeapon    += m.val;
+        else if (gearType==="accessory") d.toAmulet    += m.val;
+        else if (gearType==="exclusive") d.toExclusive += m.val;
+      } else if (def.statKey==="critRate") d.critRate += m.val;
+        else if (def.statKey==="critDmg")  d.critDmg  += m.val;
+        else if (def.statKey==="precRate") d.precRate += m.val;
+        else if (def.statKey==="precDmg")  d.precDmg  += m.val;
+    }
+    if (enh) {
+      if (enh.type==="abilityPct"  && enh.abilityId) d.ab[enh.abilityId].pct  += m.val;
+      if (enh.type==="abilityFlat" && enh.abilityId) d.ab[enh.abilityId].flat += m.val;
+    }
+  });
+  return d;
+}
+
+// Apply (sign=+1) or remove (sign=-1) a delta object from a live stats object.
+function applyContribs(stats, d, sign) {
+  stats.totalDmgPct  += sign * d.totalDmgPct;
+  stats.bossDmgPct   += sign * d.bossDmgPct;
+  stats.meleeDmgPct  += sign * d.meleeDmgPct;
+  stats.fullHpDmgPct += sign * d.fullHpDmgPct;
+  stats.critRate     += sign * d.critRate;
+  stats.critDmg      += sign * d.critDmg;
+  stats.precRate     += sign * d.precRate;
+  stats.precDmg      += sign * d.precDmg;
+  stats.toWeapon     += sign * d.toWeapon;
+  stats.toAmulet     += sign * d.toAmulet;
+  stats.toExclusive  += sign * d.toExclusive;
+  hero.abilities.forEach(ab => {
+    if (stats.abilityBonus[ab.id] && d.ab[ab.id]) {
+      stats.abilityBonus[ab.id].pct  += sign * d.ab[ab.id].pct;
+      stats.abilityBonus[ab.id].flat += sign * d.ab[ab.id].flat;
+    }
+  });
+  stats.totalOutput = computeTotalOutput(stats.toBase, stats.toWeapon, stats.toAmulet, stats.toExclusive);
+  stats.activeCond  = (condState.boss ? stats.bossDmgPct : 0)
+                    + (condState.melee ? stats.meleeDmgPct : 0)
+                    + (condState.fullhp ? stats.fullHpDmgPct : 0);
+}
+
+// Return a stats snapshot with the given slot's item swapped to testGs.
+// In gear-driven mode: removes current item's contributions first (true swap).
+// In manual mode: adds test item on top of manual stats.
+function getCompareStats(slotType, testGs) {
+  const stats    = resolveStats();
+  const gearType = hero.gear[slotType]?.gearType || slotType;
+
+  if (gearDrivenMode) {
+    const equippedId = equippedGear[slotType];
+    if (equippedId) {
+      const eqDef = hero.gear[slotType]?.items.find(i => i.id === equippedId);
+      const eqGs  = gearState[equippedId];
+      if (eqGs && eqDef) {
+        if (eqDef.baseStatKey === "accCr") stats.critRate -= eqGs.base;
+        applyContribs(stats, getItemContribs(gearType, eqGs), -1);
+      }
+    }
+  }
+
+  // Apply test item base stat (only accessory crit rate affects the formula directly;
+  // weapon flat is handled per-ability via weaponFlatDelta below)
+  if (gearType === "accessory") stats.critRate += testGs.base;
+
+  applyContribs(stats, getItemContribs(gearType, testGs), +1);
+  return stats;
+}
+
+// Compute avg damage for one ability, with an optional additive weapon-flat correction.
+function computeAvgForAbility(ability, stats, weaponFlatDelta) {
+  let base = resolveAbilityBase(ability, stats);
+  if (weaponFlatDelta) {
+    // resolveAbilityBase already added the current weapon's flat; correct to test weapon's flat
+    const wid  = equippedGear.weapon;
+    const wdef = wid ? hero.gear.weapon.items.find(i => i.id === wid) : null;
+    if (wdef?.baseStatKey === "weaponFlatRam"    && (ability.id==="ram"||ability.id==="sprint")) base += weaponFlatDelta;
+    if (wdef?.baseStatKey === "weaponFlatSplish" && ability.id==="splish")                       base += weaponFlatDelta;
+  }
+  const { flatBonus, abilityPct } = resolveAbilityBonuses(ability.id, stats);
+  return computeDamage(stats, base, ability.dmgType, flatBonus, abilityPct).avgHit;
+}
+
+function updateCompareResults() {
+  const resultDiv = el("compare-items-result");
+  if (!resultDiv) return;
+
+  const slotType     = compareState.slotType;
+  const gearType     = hero.gear[slotType]?.gearType || slotType;
+  const equippedId   = equippedGear[slotType];
+  const currentBase  = (equippedId && gearState[equippedId]) ? gearState[equippedId].base : 0;
+
+  const currentStats = resolveStats();
+  const statsA       = getCompareStats(slotType, compareState.itemA);
+  const statsB       = getCompareStats(slotType, compareState.itemB);
+
+  // Weapon flat delta: how test item's base differs from currently equipped weapon's base
+  const deltaA = gearType==="weapon" ? (compareState.itemA.base - currentBase) : 0;
+  const deltaB = gearType==="weapon" ? (compareState.itemB.base - currentBase) : 0;
+
+  let anyData = false;
+  let rows = "";
+  hero.abilities.forEach(ab => {
+    const cur  = computeAvgForAbility(ab, currentStats, 0);
+    const valA = computeAvgForAbility(ab, statsA, deltaA);
+    const valB = computeAvgForAbility(ab, statsB, deltaB);
+    if (cur===0 && valA===0 && valB===0) return;
+    anyData = true;
+
+    const dA = cur > 0 ? (valA - cur) / cur * 100 : 0;
+    const dB = cur > 0 ? (valB - cur) / cur * 100 : 0;
+    const fmtD = n => (n >= 0 ? "+" : "") + n.toFixed(1) + "%";
+    const dCol = n => n > 0.05 ? "var(--green)" : n < -0.05 ? "var(--red)" : "var(--muted)";
+
+    const aWins = valA >= valB;
+    rows += `<tr>
+      <td>${ab.label}</td>
+      <td style="color:var(--muted)">${fmt(cur)}</td>
+      <td style="color:${aWins?"var(--accent)":"var(--text)"}">${fmt(valA)}</td>
+      <td style="font-size:10px;color:${dCol(dA)}">${fmtD(dA)}</td>
+      <td style="color:${!aWins?"var(--yellow)":"var(--text)"}">${fmt(valB)}</td>
+      <td style="font-size:10px;color:${dCol(dB)}">${fmtD(dB)}</td>
+      <td style="font-weight:700;color:${aWins?"var(--accent)":"var(--yellow)"}">
+        ${valA===valB ? "=" : aWins ? (compareState.itemA.label||"A") : (compareState.itemB.label||"B")}
+      </td>
+    </tr>`;
+  });
+
+  if (!anyData) {
+    resultDiv.innerHTML = "<div style='color:var(--muted);font-size:12px;margin-top:6px'>Enter base damage values above to see results.</div>";
+    return;
+  }
+
+  let modeNote = "";
+  if (!gearDrivenMode) modeNote = `<div class="warn-box" style="margin-bottom:6px">Manual mode: items are added on top of your entered stats rather than replacing the equipped item. Switch to Gear-driven for a true swap.</div>`;
+
+  resultDiv.innerHTML = modeNote + `
+    <table class="ability-summary" style="margin-top:4px">
+      <thead><tr>
+        <th>Ability</th>
+        <th style="color:var(--muted)">Current</th>
+        <th style="color:var(--accent)">${compareState.itemA.label||"Item A"}</th>
+        <th></th>
+        <th style="color:var(--yellow)">${compareState.itemB.label||"Item B"}</th>
+        <th></th>
+        <th>Best</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderComparePanel(body) {
+  body.innerHTML = "";
+  const slotType = compareState.slotType;
+  const gearType = hero.gear[slotType]?.gearType || slotType;
+  const pool     = GEAR_ELIGIBLE_POOLS[gearType] || [];
+
+  // Slot selector row
+  const slotRow = document.createElement("div");
+  slotRow.style = "display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;";
+  slotRow.innerHTML = `<span style="font-size:11px;color:var(--muted)">Compare slot:</span>
+    <select id="cmp-slot-sel" style="background:var(--panel2);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:3px 6px;font-size:12px;">
+      <option value="weapon"${slotType==="weapon"?" selected":""}>Weapon</option>
+      <option value="armor"${slotType==="armor"?" selected":""}>Armor</option>
+      <option value="accessory"${slotType==="accessory"?" selected":""}>Accessory</option>
+      <option value="exclusive"${slotType==="exclusive"?" selected":""}>Exclusive</option>
+    </select>
+    <span style="font-size:10px;color:var(--muted)">Currently equipped: <b style="color:var(--text)">${
+      equippedGear[slotType]
+        ? (hero.gear[slotType]?.items.find(i=>i.id===equippedGear[slotType])?.label||equippedGear[slotType])
+        : "none"
+    }</b></span>`;
+  body.appendChild(slotRow);
+  slotRow.querySelector("#cmp-slot-sel").addEventListener("change", e => {
+    compareState.slotType = e.target.value;
+    renderComparePanel(body);
+  });
+
+  // Two-column item area
+  const grid = document.createElement("div");
+  grid.style = "display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;";
+  body.appendChild(grid);
+
+  ["A","B"].forEach(key => {
+    const item  = compareState["item"+key];
+    const color = key==="A" ? "var(--accent)" : "var(--yellow)";
+    const card  = document.createElement("div");
+    card.style  = `background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px;`;
+    grid.appendChild(card);
+
+    // Header row
+    const hdr = document.createElement("div");
+    hdr.style = "display:flex;align-items:center;gap:6px;margin-bottom:6px;";
+    hdr.innerHTML = `<b style="color:${color};font-size:12px;min-width:14px">${key}</b>
+      <input type="text" value="${item.label}" placeholder="Label"
+        style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 5px;font-size:11px;"
+        id="cmp-label-${key}">
+      <button class="btn secondary" style="padding:1px 6px;font-size:10px" onclick="fillCmpSTier('${key}')">S-tier</button>
+      <button class="btn secondary" style="padding:1px 6px;font-size:10px" onclick="clearCmpItem('${key}')">Clear</button>`;
+    card.appendChild(hdr);
+
+    // Base stat row (weapon flat or accessory base crit — the two that affect formula)
+    let baseLabel = null;
+    if (gearType==="weapon")    baseLabel = "Weapon flat dmg +";
+    if (gearType==="accessory") baseLabel = "Base Crit Rate +";
+    if (baseLabel) {
+      const baseRow = document.createElement("div");
+      baseRow.style = "display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px;";
+      baseRow.innerHTML = `<span style="color:var(--muted);flex:1">${baseLabel}</span>
+        <input type="number" value="${item.base}" step="0.1" min="0"
+          style="width:72px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 5px;font-size:11px;text-align:right;"
+          id="cmp-base-${key}">`;
+      card.appendChild(baseRow);
+    }
+
+    // 5 mod rows
+    const modHdr = document.createElement("div");
+    modHdr.style = "font-size:10px;color:var(--muted);margin-bottom:3px;";
+    modHdr.textContent = "5 Modifiers:";
+    card.appendChild(modHdr);
+
+    for (let i = 0; i < 5; i++) {
+      const mod = item.mods[i] || { statId:null, val:0 };
+      const g   = mod.statId && mod.val ? calcGrade(mod.statId, mod.val) : "";
+      const row = document.createElement("div");
+      row.className = "gear-mod-row";
+
+      const sel = document.createElement("select");
+      sel.id = `cmp-${key}-s-${i}`;
+      sel.innerHTML = `<option value="">— none —</option>`
+        + pool.map(sid => {
+            const d2 = STAT_POOL[sid]||JEFF_ENHANCEMENTS[sid];
+            return d2 ? `<option value="${sid}"${mod.statId===sid?" selected":""}>${d2.label}</option>` : "";
+          }).join("");
+
+      const valInp = document.createElement("input");
+      valInp.type = "number"; valInp.id = `cmp-${key}-v-${i}`;
+      valInp.value = mod.val||0; valInp.step = "0.01";
+
+      const badge = document.createElement("span");
+      badge.id = `cmp-${key}-g-${i}`;
+      badge.className = g ? `grade grade-${g}` : "grade";
+      badge.textContent = g;
+
+      row.appendChild(sel); row.appendChild(valInp); row.appendChild(badge);
+      card.appendChild(row);
+    }
+  });
+
+  // Wire all events after DOM is built
+  ["A","B"].forEach(key => {
+    const item = compareState["item"+key];
+
+    const labelInp = body.querySelector(`#cmp-label-${key}`);
+    if (labelInp) labelInp.addEventListener("input", e => { item.label = e.target.value; updateCompareResults(); });
+
+    const baseInp = body.querySelector(`#cmp-base-${key}`);
+    if (baseInp) baseInp.addEventListener("input", e => { item.base = parseFloat(e.target.value)||0; updateCompareResults(); });
+
+    for (let i = 0; i < 5; i++) {
+      const sel   = body.querySelector(`#cmp-${key}-s-${i}`);
+      const vinp  = body.querySelector(`#cmp-${key}-v-${i}`);
+      const badge = body.querySelector(`#cmp-${key}-g-${i}`);
+      const sync  = () => {
+        const sid = sel?.value || null;
+        const val = parseFloat(vinp?.value) || 0;
+        item.mods[i] = { statId: sid, val };
+        if (badge) {
+          const g = sid && val ? calcGrade(sid, val) : "";
+          badge.className = g ? `grade grade-${g}` : "grade";
+          badge.textContent = g;
+        }
+        updateCompareResults();
+      };
+      if (sel)  sel.addEventListener("change", sync);
+      if (vinp) vinp.addEventListener("input",  sync);
+    }
+  });
+
+  // Results container
+  const resultDiv = document.createElement("div");
+  resultDiv.id = "compare-items-result";
+  body.appendChild(resultDiv);
+  updateCompareResults();
+}
+
+function fillCmpSTier(key) {
+  const pool = GEAR_ELIGIBLE_POOLS[hero.gear[compareState.slotType]?.gearType || compareState.slotType] || [];
+  const mods = [];
+  for (const sid of pool) {
+    if (mods.length >= 5) break;
+    const d = STAT_POOL[sid] || JEFF_ENHANCEMENTS[sid];
+    if (d?.sMax) mods.push({ statId: sid, val: d.sMax });
+  }
+  while (mods.length < 5) mods.push({ statId:null, val:0 });
+  compareState["item"+key].mods = mods;
+  renderComparePanel(el("compare-items-body"));
+}
+
+function clearCmpItem(key) {
+  compareState["item"+key].base = 0;
+  compareState["item"+key].mods = emptyMods();
+  renderComparePanel(el("compare-items-body"));
+}
+
+function buildComparePanel() {
+  const body = el("compare-items-body");
+  if (body) renderComparePanel(body);
 }
 
 // ============================================================
@@ -2123,6 +2471,7 @@ document.addEventListener("DOMContentLoaded", () => {
   buildRealmDOM();
   buildAbilityTabs();
   buildPriorityRef();
+  buildComparePanel();
   buildEstimatorDOM();
   displaySelfTest();
 
